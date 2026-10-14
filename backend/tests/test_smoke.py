@@ -29,7 +29,7 @@ def _isolate_projects_root(tmp_path: Path, monkeypatch: MonkeyPatch) -> None:
 def test_settings_load():
     from app.config import get_settings
     s = get_settings()
-    assert s.name == "LocalAIContent"
+    assert s.name == "song_writer"
     assert s.lmstudio.base_url.startswith("http")
     assert s.vram.gpu0_capacity_mb == 24576
 

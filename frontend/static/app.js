@@ -1,4 +1,4 @@
-// Local AI Content Studio - single-page master UI
+// song_writer - single-page master UI
 // Talks to the FastAPI backend at the same origin. No build step required.
 
 const API = "/api";

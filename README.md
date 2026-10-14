@@ -1,10 +1,10 @@
-# Local AI Content Studio
+# song_writer
 
 Local FastAPI orchestration for copy, images, video, audio, and FFmpeg delivery masters. Every project has a filesystem-backed manifest and asset registry.
 
 ## Runtime model
 
-- **GPU0:** LM Studio and Kokoro. LocalAIContent serializes its own GPU0 jobs, but LM Studio's OpenAI-compatible API has no verified model-unload endpoint; its reported GPU residency is therefore **advisory**.
+- **GPU0:** LM Studio and Kokoro. song_writer serializes its own GPU0 jobs, but LM Studio's OpenAI-compatible API has no verified model-unload endpoint; its reported GPU residency is therefore **advisory**.
 - **GPU1:** ComfyUI FLUX/Wan jobs are serialized by an application lease. `/free` is requested between models when appropriate, but a request acknowledgement is not represented as a measured VRAM release.
 - **CPU:** FFmpeg creates H.264/AAC `.mp4` social masters (1080x1920, 30 fps by default).
 

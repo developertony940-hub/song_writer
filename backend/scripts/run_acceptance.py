@@ -23,7 +23,7 @@ from app.services.acceptance import AcceptanceService
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="LocalAIContent Phase 4 production acceptance")
+    parser = argparse.ArgumentParser(description="song_writer Phase 4 production acceptance")
     parser.add_argument("--mode", choices=("offline", "real"), default="offline", help="offline uses deterministic FFmpeg fixtures; real calls configured local services")
     parser.add_argument("--operator-approved", action="store_true", help="attest that the exact recorded proxy bytes were watched (real proxy-review resume only)")
     parser.add_argument("--operator-rejected", action="store_true", help="record rejection of the exact recorded proxy and open the remediation path (real proxy-review resume only)")

@@ -176,15 +176,15 @@ def _load_data() -> tuple[dict[str, Any], Path, bool]:
         with config_path.open("rb") as fh:
             data = tomllib.load(fh)
     except OSError as exc:
-        raise RuntimeError(f"cannot read LocalAIContent configuration at {config_path}: {exc}") from exc
+        raise RuntimeError(f"cannot read song_writer configuration at {config_path}: {exc}") from exc
     if not isinstance(data, dict):
-        raise RuntimeError(f"LocalAIContent configuration at {config_path} is not a TOML object")
+        raise RuntimeError(f"song_writer configuration at {config_path} is not a TOML object")
     data = copy.deepcopy(data)
     # Existing private configuration files may predate acceptance signing.
     # Give them a safe empty default so an environment override can still work.
     acceptance = data.setdefault("acceptance", {})
     if not isinstance(acceptance, dict):
-        raise RuntimeError("LocalAIContent acceptance configuration must be a TOML table")
+        raise RuntimeError("song_writer acceptance configuration must be a TOML table")
     acceptance.setdefault("signing_secret", "")
     # Explicit aliases are easiest for shells and take precedence over generic
     # paths because they are more specific operational intent.

@@ -3,13 +3,13 @@
 # When selected through LOCALAI_CONFIG, a relative app.projects_root is resolved
 # from this TOML file's directory. Use an absolute path to opt out.
 # Alternatively override one value without a private file:
-#   LOCALAI_PROJECTS_ROOT=D:\LocalAIContent\projects
+#   LOCALAI_PROJECTS_ROOT=D:\AIOS\development\song_writer\projects
 #   LOCALAI_RUNTIME__LMSTUDIO__DEFAULT_MODEL=exact-loaded-model-id
 #   LOCALAI_FFMPEG_BINARY=ffmpeg.exe
 # Values below are portable defaults; they contain no machine-specific paths or secrets.
 
 [app]
-name = "LocalAIContent"
+name = "song_writer"
 version = "0.1.0"
 host = "127.0.0.1"
 port = 8000

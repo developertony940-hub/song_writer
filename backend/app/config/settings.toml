@@ -1,7 +1,7 @@
 # Portable checked-in defaults. Override values with LOCALAI_* environment variables
 # or set LOCALAI_CONFIG to a private TOML file. See settings.example.toml and README.
 [app]
-name = "LocalAIContent"
+name = "song_writer"
 version = "0.1.0"
 host = "127.0.0.1"
 port = 8000

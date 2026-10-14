@@ -1,4 +1,4 @@
-# Launch the Local AI Content Studio backend on Windows.
+# Launch the song_writer backend on Windows.
 # Assumes a virtualenv at backend\.venv (created if missing). Configuration is
 # read by the app from LOCALAI_CONFIG / LOCALAI_* environment overrides.
 [CmdletBinding()]
