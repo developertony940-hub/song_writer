@@ -262,3 +262,27 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   margin: 10px 0 0;
 }
 .copy-output:empty::before { content: "No copy generated yet."; color: var(--muted); }
+
+/* Audiobook slice editor */
+.ab-chapter {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 10px;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  background: var(--panel-2);
+}
+.ab-chapter mark.ab-span { background: rgba(79, 140, 255, 0.28); color: inherit; border-radius: 3px; padding: 0 1px; }
+.ab-chapter mark.ab-span.review { background: rgba(210, 153, 34, 0.35); }
+.ab-chapter del { color: var(--muted); text-decoration: line-through; }
+.ab-row { gap: 6px; align-items: center; margin: 4px 0; flex-wrap: wrap; }
+.ab-row input { min-width: 70px; }
+.ab-row .ab-id { width: 70px; }
+.ab-row .ab-speaker, .ab-row .ab-name { width: 110px; }
+.ab-row .ab-voice { width: 120px; }
+.ab-row .ab-start, .ab-row .ab-end, .ab-row .ab-confidence, .ab-row .ab-ex-start, .ab-row .ab-ex-end { width: 84px; }
+.ab-row .ab-ex-reason { flex: 1; min-width: 160px; }
+.ab-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }

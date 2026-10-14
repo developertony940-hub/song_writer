@@ -14,10 +14,16 @@ from app.models.audiobook import (
     ClearRecoveryRequest,
     ImportChapterRequest,
     RenderRequest,
+    ReviewRequest,
     SetAnnotationsRequest,
     SetSpeakersRequest,
 )
-from app.services.audiobook import AudiobookError, RecoveryBlocked, get_audiobook
+from app.services.audiobook import (
+    AudiobookError,
+    GenerationNotAuthorized,
+    RecoveryBlocked,
+    get_audiobook,
+)
 
 router = APIRouter(prefix="/api/audiobook", tags=["audiobook"])
 
@@ -25,6 +31,8 @@ router = APIRouter(prefix="/api/audiobook", tags=["audiobook"])
 def _error(exc: Exception) -> HTTPException:
     if isinstance(exc, KeyError):
         return HTTPException(404, str(exc))
+    if isinstance(exc, GenerationNotAuthorized):
+        return HTTPException(403, str(exc))
     if isinstance(exc, RecoveryBlocked):
         return HTTPException(423, str(exc))
     return HTTPException(409, str(exc))
@@ -34,6 +42,14 @@ def _error(exc: Exception) -> HTTPException:
 def status(pid: str):
     try:
         return get_audiobook().status(pid)
+    except (KeyError, AudiobookError) as exc:
+        raise _error(exc)
+
+
+@router.get("/{pid}/chapter")
+def chapter(pid: str):
+    try:
+        return get_audiobook().chapter(pid)
     except (KeyError, AudiobookError) as exc:
         raise _error(exc)
 
@@ -86,6 +102,16 @@ def assemble(pid: str, req: AssembleRequest):
         raise _error(exc)
 
 
+@router.post("/{pid}/review")
+def review(pid: str, req: ReviewRequest):
+    try:
+        return get_audiobook().review(
+            pid, listened_wav=req.listened_wav, listened_mp3=req.listened_mp3, note=req.note,
+        ).model_dump(mode="json")
+    except (KeyError, AudiobookError) as exc:
+        raise _error(exc)
+
+
 @router.post("/{pid}/approve")
 def approve(pid: str):
     try:
@@ -105,6 +131,9 @@ def approval(pid: str):
 @router.post("/{pid}/recovery/clear")
 def clear_recovery(pid: str, req: ClearRecoveryRequest):
     try:
-        return get_audiobook().clear_recovery(pid, req.note).model_dump(mode="json")
+        return get_audiobook().clear_recovery(
+            pid, worker_stopped=req.worker_stopped, queue_drained=req.queue_drained,
+            evidence=req.evidence, note=req.note,
+        ).model_dump(mode="json")
     except (KeyError, AudiobookError) as exc:
         raise _error(exc)

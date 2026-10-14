@@ -111,6 +111,7 @@ async function openProject(pid) {
   await loadProjects();
   await refreshAllAssets();
   await refreshPlanWorkspace();
+  await refreshAudiobook();
 }
 
 // ---------- stage approval ----------
@@ -151,7 +152,7 @@ document.getElementById("tabs").addEventListener("click", (e) => {
   switchTab(btn.dataset.tab);
 });
 function switchTab(tab) {
-  if (tab === "timeline" || tab === "brief") {
+  if (tab === "timeline" || tab === "brief" || tab === "audiobook") {
     activateTab(tab);
     return;
   }
@@ -174,6 +175,7 @@ function activateTab(tab) {
     p.hidden = !show;
   });
   if (tab === "timeline") renderTimeline();
+  if (tab === "audiobook") refreshAudiobook();
 }
 
 // ---------- assets rendering ----------
@@ -794,3 +796,284 @@ document.getElementById("plan-audio-btn").addEventListener("click", disabledWhil
 document.getElementById("plan-preview-btn").addEventListener("click", disabledWhile(document.getElementById("plan-preview-btn"), async () => { const asset = await api("/generate/plan/preview", { method: "POST", body: JSON.stringify({ project_id: currentProject.id, output_name: document.getElementById("plan-preview-name").value || "plan_preview" }) }); latestPlanPreview = asset.id; await refreshPlanWorkspace(); toast("Proxy rendered; watch it and explicitly approve it."); }));
 document.getElementById("plan-approve-preview-btn").addEventListener("click", async () => { if (!latestPlanPreview) { toast("Render/select a proxy first", "err"); return; } await api("/generate/plan/approve-preview", { method: "POST", body: JSON.stringify({ project_id: currentProject.id, preview_asset_id: latestPlanPreview }) }); currentProject = await api(`/projects/${currentProject.id}`); await refreshPlanWorkspace(); toast("Proxy explicitly approved. Master render is now unlocked."); });
 document.getElementById("plan-master-btn").addEventListener("click", disabledWhile(document.getElementById("plan-master-btn"), async () => { await api("/generate/plan/render-master", { method: "POST", body: JSON.stringify({ project_id: currentProject.id, output_name: document.getElementById("plan-master-name").value || "final_master" }) }); currentProject = await api(`/projects/${currentProject.id}`); renderStageStatus(); await refreshAllAssets(); toast("Plan master passed delivery QC and awaits final approval."); }));
+
+// ---------- Phase 1 audiobook slice editor (isolated panel) ----------
+let abState = null;
+
+function abEsc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+function abShort(h) { return h ? h.slice(0, 10) + "…" : "—"; }
+
+async function refreshAudiobook() {
+  if (!currentProject) return;
+  const pid = currentProject.id;
+  try {
+    const status = await api(`/audiobook/${pid}/status`);
+    abState = status.state;
+    await renderAudiobookChapter(pid, status);
+    renderAudiobookSpeakers();
+    renderAudiobookSpans();
+    renderAudiobookChunks();
+    renderAudiobookMaster(status);
+    renderAudiobookRecovery(status);
+    const note = document.getElementById("ab-render-note");
+    note.textContent = status.live_generation_authorized
+      ? "live generation: authorized"
+      : "live generation: held server-side (real render will be refused)";
+    note.className = status.live_generation_authorized ? "muted" : "err";
+  } catch (e) {
+    abState = null;
+    document.getElementById("ab-chapter-view").innerHTML = "<p class='muted'>No chapter imported yet.</p>";
+    document.getElementById("ab-coverage").textContent = "";
+    document.getElementById("ab-speakers").innerHTML = "";
+    document.getElementById("ab-spans").innerHTML = "";
+    document.getElementById("ab-exclusions").innerHTML = "";
+    document.getElementById("ab-chunks").innerHTML = "";
+    document.getElementById("ab-master").textContent = "";
+    document.getElementById("ab-verification").textContent = "";
+    document.getElementById("ab-recovery-box").hidden = true;
+  }
+}
+
+async function renderAudiobookChapter(pid, status) {
+  const view = document.getElementById("ab-chapter-view");
+  const cov = document.getElementById("ab-coverage");
+  let chapter = { imported: false, text: "" };
+  try { chapter = await api(`/audiobook/${pid}/chapter`); } catch {}
+  if (!chapter.imported) {
+    view.innerHTML = "<p class='muted'>No chapter imported yet.</p>";
+    cov.textContent = "";
+    return;
+  }
+  const text = chapter.text;
+  const ann = (status.state && status.state.annotations) || { spans: [], exclusions: [] };
+  const marks = [
+    ...(ann.spans || []).map(s => ({ ...s, _t: "span" })),
+    ...(ann.exclusions || []).map(e => ({ ...e, _t: "excl" })),
+  ].sort((a, b) => a.start_char - b.start_char);
+  let html = "", cursor = 0;
+  for (const m of marks) {
+    if (m.start_char > cursor) html += abEsc(text.slice(cursor, m.start_char));
+    const slice = abEsc(text.slice(m.start_char, m.end_char));
+    if (m._t === "span") {
+      const cls = m.needs_review ? "ab-span review" : "ab-span";
+      const pct = Math.round((m.confidence ?? 1) * 100);
+      html += `<mark class="${cls}" title="${abEsc(m.speaker)} (${pct}%)">${slice}</mark>`;
+    } else {
+      html += `<del title="${abEsc(m.reason || "excluded")}">${slice}</del>`;
+    }
+    cursor = m.end_char;
+  }
+  if (cursor < text.length) html += abEsc(text.slice(cursor));
+  view.innerHTML = html.replace(/\n/g, "<br>");
+  const errors = status.coverage_errors || [];
+  const unresolved = status.unresolved_spans || [];
+  cov.textContent = errors.length
+    ? "Coverage: " + errors.join(" | ")
+    : `Coverage complete${unresolved.length ? " · unresolved: " + unresolved.join(", ") : ""}.`;
+  cov.className = errors.length ? "err" : "muted";
+}
+
+function abSpeakerRow(name, voice, speed) {
+  const row = el("div", { class: "row ab-row" });
+  row.append(el("input", { class: "ab-name", value: name ?? "", placeholder: "name" }));
+  row.append(el("input", { class: "ab-voice", value: voice ?? "", placeholder: "voice" }));
+  row.append(el("input", { class: "ab-speed", type: "number", step: "0.05", min: "0.1", max: "4", value: speed ?? 1 }));
+  row.append(el("button", { class: "ab-del", title: "Remove", onclick: () => row.remove() }, "✕"));
+  return row;
+}
+function renderAudiobookSpeakers() {
+  const box = document.getElementById("ab-speakers");
+  box.innerHTML = "";
+  for (const [name, sp] of Object.entries(abState?.speakers || {})) {
+    box.append(abSpeakerRow(name, sp.voice, sp.speed));
+  }
+}
+
+function abSpanRow(s) {
+  const row = el("div", { class: "row ab-row" });
+  row.append(el("input", { class: "ab-id", value: s.id ?? "", placeholder: "id" }));
+  row.append(el("input", { class: "ab-speaker", value: s.speaker ?? "", placeholder: "speaker" }));
+  row.append(el("input", { class: "ab-start", type: "number", value: s.start_char ?? 0 }));
+  row.append(el("input", { class: "ab-end", type: "number", value: s.end_char ?? 0 }));
+  row.append(el("input", { class: "ab-confidence", type: "number", step: "0.05", min: "0", max: "1", value: s.confidence ?? 1 }));
+  const label = el("label", { class: "ab-inline" }, "review");
+  const cb = el("input", { class: "ab-needs-review", type: "checkbox" });
+  if (s.needs_review) cb.checked = true;
+  label.prepend(cb);
+  row.append(label);
+  row.append(el("button", { class: "ab-del", title: "Remove", onclick: () => row.remove() }, "✕"));
+  return row;
+}
+function abExclusionRow(e) {
+  const row = el("div", { class: "row ab-row" });
+  row.append(el("input", { class: "ab-ex-start", type: "number", value: e.start_char ?? 0 }));
+  row.append(el("input", { class: "ab-ex-end", type: "number", value: e.end_char ?? 0 }));
+  row.append(el("input", { class: "ab-ex-reason", value: e.reason ?? "", placeholder: "reason" }));
+  row.append(el("button", { class: "ab-del", title: "Remove", onclick: () => row.remove() }, "✕"));
+  return row;
+}
+function renderAudiobookSpans() {
+  const spans = document.getElementById("ab-spans");
+  const exclusions = document.getElementById("ab-exclusions");
+  spans.innerHTML = "";
+  exclusions.innerHTML = "";
+  for (const s of (abState?.annotations?.spans || [])) spans.append(abSpanRow(s));
+  for (const e of (abState?.annotations?.exclusions || [])) exclusions.append(abExclusionRow(e));
+}
+
+function readAudiobookSpans() {
+  const spans = [...document.querySelectorAll("#ab-spans .ab-row")].map(row => ({
+    id: row.querySelector(".ab-id").value.trim(),
+    speaker: row.querySelector(".ab-speaker").value.trim(),
+    start_char: parseInt(row.querySelector(".ab-start").value, 10),
+    end_char: parseInt(row.querySelector(".ab-end").value, 10),
+    confidence: parseFloat(row.querySelector(".ab-confidence").value),
+    needs_review: row.querySelector(".ab-needs-review").checked,
+  }));
+  const exclusions = [...document.querySelectorAll("#ab-exclusions .ab-row")].map(row => ({
+    start_char: parseInt(row.querySelector(".ab-ex-start").value, 10),
+    end_char: parseInt(row.querySelector(".ab-ex-end").value, 10),
+    reason: row.querySelector(".ab-ex-reason").value.trim(),
+  }));
+  return { spans, exclusions };
+}
+
+function renderAudiobookChunks() {
+  const box = document.getElementById("ab-chunks");
+  box.innerHTML = "";
+  const chunks = abState?.chunks || [];
+  if (!chunks.length) { box.append(el("p", { class: "muted" }, "No chunks planned yet.")); return; }
+  for (const c of chunks) {
+    box.append(el("div", { class: "row ab-row" },
+      `${c.span_id} · ${c.speaker} · ${c.status} · [${c.start_char}, ${c.end_char})`));
+  }
+}
+
+function renderAudiobookMaster(status) {
+  const st = status.state || {};
+  const box = document.getElementById("ab-master");
+  const parts = [];
+  parts.push(st.master
+    ? `master wav ${abShort(st.master.wav_sha256)} · mp3 ${abShort(st.master.mp3_sha256)} · pause ${st.master.pause_ms}ms`
+    : "No master assembled yet.");
+  parts.push(st.review ? `reviewed ${abShort(st.review.wav_sha256)}/${abShort(st.review.mp3_sha256)}` : "not reviewed");
+  if (st.approval) parts.push(`approved ${st.approval.approved_at}`);
+  box.textContent = parts.join(" · ");
+  const v = status.verification || {};
+  const vb = document.getElementById("ab-verification");
+  const reasons = (v.reasons || []).join("; ");
+  vb.textContent = "verification: " + (v.approved ? "approved" : "not approved" + (reasons ? " (" + reasons + ")" : ""));
+  vb.className = v.approved ? "muted" : "err";
+}
+
+function renderAudiobookRecovery(status) {
+  const box = document.getElementById("ab-recovery-box");
+  const blocked = status.state?.recovery?.blocked || status.capacity_hold;
+  box.hidden = !blocked;
+  document.getElementById("ab-recovery-msg").textContent =
+    status.state?.recovery?.reason || (status.capacity_hold ? status.capacity_hold.reason : "");
+}
+
+document.getElementById("ab-import-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-import-btn"),
+  async () => {
+    const text = document.getElementById("ab-chapter-text").value;
+    if (!text.trim()) { toast("Paste chapter text first", "err"); return; }
+    await api(`/audiobook/${currentProject.id}/chapter`, { method: "POST", body: JSON.stringify({
+      text, filename: document.getElementById("ab-filename").value.trim() || "chapter.txt",
+    }) });
+    toast("Chapter imported and locked");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-add-speaker-btn").addEventListener("click", () =>
+  document.getElementById("ab-speakers").append(abSpeakerRow("", "", 1)));
+document.getElementById("ab-save-speakers-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-save-speakers-btn"),
+  async () => {
+    const speakers = [...document.querySelectorAll("#ab-speakers .ab-row")].map(r => ({
+      name: r.querySelector(".ab-name").value.trim(),
+      voice: r.querySelector(".ab-voice").value.trim(),
+      speed: parseFloat(r.querySelector(".ab-speed").value) || 1,
+    })).filter(s => s.name && s.voice);
+    if (!speakers.length) { toast("Add at least one speaker with a name and voice", "err"); return; }
+    await api(`/audiobook/${currentProject.id}/speakers`, { method: "PUT", body: JSON.stringify({ speakers }) });
+    toast("Speakers saved");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-add-span-btn").addEventListener("click", () =>
+  document.getElementById("ab-spans").append(abSpanRow({})));
+document.getElementById("ab-add-exclusion-btn").addEventListener("click", () =>
+  document.getElementById("ab-exclusions").append(abExclusionRow({})));
+document.getElementById("ab-save-spans-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-save-spans-btn"),
+  async () => {
+    const { spans, exclusions } = readAudiobookSpans();
+    await api(`/audiobook/${currentProject.id}/annotations`, { method: "PUT", body: JSON.stringify({ spans, exclusions }) });
+    document.getElementById("ab-span-errors").textContent = "";
+    toast("Annotations saved");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-plan-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-plan-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/chunks/plan`, { method: "POST", body: "{}" });
+    toast("Chunks planned");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-render-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-render-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/render`, { method: "POST", body: JSON.stringify({ force: false }) });
+    toast("Render complete");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-assemble-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-assemble-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/assemble`, { method: "POST", body: JSON.stringify({ pause_ms: 300 }) });
+    toast("Assembled; listen to both files, then record the listen-back");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-review-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-review-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/review`, { method: "POST", body: JSON.stringify({
+      listened_wav: document.getElementById("ab-listened-wav").checked,
+      listened_mp3: document.getElementById("ab-listened-mp3").checked,
+    }) });
+    toast("Listen-back recorded");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-approve-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-approve-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/approve`, { method: "POST" });
+    toast("Approved (bytes bound)");
+    await refreshAudiobook();
+  }
+));
+document.getElementById("ab-verify-btn").addEventListener("click", async () => {
+  const v = await api(`/audiobook/${currentProject.id}/approval`);
+  toast(v.approved ? "Verified: approval is current" : "Not approved: " + (v.reasons || []).join("; "), v.approved ? "ok" : "err");
+});
+document.getElementById("ab-clear-recovery-btn").addEventListener("click", disabledWhile(
+  document.getElementById("ab-clear-recovery-btn"),
+  async () => {
+    await api(`/audiobook/${currentProject.id}/recovery/clear`, { method: "POST", body: JSON.stringify({
+      worker_stopped: document.getElementById("ab-worker-stopped").checked,
+      queue_drained: document.getElementById("ab-queue-drained").checked,
+      evidence: document.getElementById("ab-evidence").value.trim(),
+    }) });
+    toast("Recovery cleared; shared capacity released");
+    await refreshAudiobook();
+  }
+));

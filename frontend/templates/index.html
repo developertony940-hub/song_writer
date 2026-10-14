@@ -39,6 +39,7 @@
           <button data-tab="final" class="tab">5 · Assemble</button>
           <button data-tab="timeline" class="tab">Timeline</button>
           <button data-tab="brief" class="tab">Brief</button>
+          <button data-tab="audiobook" class="tab">Audiobook</button>
         </nav>
         <div class="stage-status" id="stage-status"></div>
 
@@ -212,6 +213,80 @@
             <textarea id="brf-brief" rows="4" placeholder="Content brief"></textarea>
             <textarea id="brf-notes" rows="2" placeholder="Notes"></textarea>
             <button id="save-brief-btn" class="primary">Save Brief</button>
+          </div>
+        </section>
+
+        <!-- Audiobook tab (Phase 1 slice: isolated editor panel) -->
+        <section class="tab-panel" data-panel="audiobook" hidden>
+          <div class="gen-form">
+            <h3>Audiobook · Chapter</h3>
+            <p class="muted">Import one locked chapter, attribute verbatim speaker spans, resolve uncertainty, then plan deterministic chunks. Live TTS generation is held server-side until explicitly authorized.</p>
+            <div class="row">
+              <input id="ab-filename" placeholder="chapter.txt" value="chapter.txt" style="width:180px">
+              <button id="ab-import-btn" class="primary">Import Chapter</button>
+            </div>
+            <textarea id="ab-chapter-text" rows="4" placeholder="Paste the chapter text to import (immutable once locked)"></textarea>
+            <div id="ab-chapter-view" class="ab-chapter"></div>
+            <div id="ab-coverage" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Speakers</h3>
+            <div id="ab-speakers"></div>
+            <div class="row">
+              <button id="ab-add-speaker-btn">+ Speaker</button>
+              <button id="ab-save-speakers-btn" class="primary">Save Speakers</button>
+            </div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Coverage annotations</h3>
+            <p class="muted">Spans and exclusions must tile the chapter exactly once, in source order. Toggle <em>review</em> to mark an uncertain attribution; unresolved spans block planning and rendering.</p>
+            <h4 style="margin:6px 0">Speaker spans</h4>
+            <div id="ab-spans"></div>
+            <h4 style="margin:6px 0">Exclusions</h4>
+            <div id="ab-exclusions"></div>
+            <div class="row">
+              <button id="ab-add-span-btn">+ Span</button>
+              <button id="ab-add-exclusion-btn">+ Exclusion</button>
+              <button id="ab-save-spans-btn" class="primary">Save Annotations</button>
+            </div>
+            <div id="ab-span-errors" class="err"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Chunks &amp; render</h3>
+            <div class="row">
+              <button id="ab-plan-btn" class="primary">Plan Chunks</button>
+              <button id="ab-render-btn" class="primary">Render</button>
+              <span id="ab-render-note" class="muted"></span>
+            </div>
+            <div id="ab-chunks"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Assemble → listen → approve → verify</h3>
+            <p class="muted">Approval is bound to the exact WAV/MP3 bytes you listened to. You must listen before you may approve; a later byte change invalidates approval.</p>
+            <div class="row">
+              <button id="ab-assemble-btn" class="primary">Assemble</button>
+              <label class="ab-inline"><input type="checkbox" id="ab-listened-wav"> listened WAV</label>
+              <label class="ab-inline"><input type="checkbox" id="ab-listened-mp3"> listened MP3</label>
+              <button id="ab-review-btn">Record listen-back</button>
+              <button id="ab-approve-btn" class="primary">Approve</button>
+              <button id="ab-verify-btn">Verify</button>
+            </div>
+            <div id="ab-master" class="muted"></div>
+            <div id="ab-verification" class="muted"></div>
+          </div>
+
+          <div class="gen-form" id="ab-recovery-box" hidden>
+            <h3>Recovery hold</h3>
+            <div id="ab-recovery-msg" class="err"></div>
+            <p class="muted">Clearing requires documented stop/drain evidence; acknowledgement alone is insufficient.</p>
+            <label class="ab-inline"><input type="checkbox" id="ab-worker-stopped"> worker stopped</label>
+            <label class="ab-inline"><input type="checkbox" id="ab-queue-drained"> queue drained</label>
+            <textarea id="ab-evidence" rows="2" placeholder="Evidence: log path, worker PID, queue length, command…"></textarea>
+            <button id="ab-clear-recovery-btn" class="primary">Clear Recovery</button>
           </div>
         </section>
       </div>

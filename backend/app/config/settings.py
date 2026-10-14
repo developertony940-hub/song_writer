@@ -119,6 +119,17 @@ class AcceptanceCfg:
 
 
 @dataclass(frozen=True)
+class AudiobookCfg:
+    """Phase 1 audiobook slice controls.
+
+    ``live_generation_authorized`` is a server-side hold: while ``False`` the
+    API refuses any real (non-fake) TTS render request. Deterministic fake
+    synthesis injected by isolated tests is unaffected.
+    """
+    live_generation_authorized: bool = False
+
+
+@dataclass(frozen=True)
 class Settings:
     name: str
     version: str
@@ -133,6 +144,7 @@ class Settings:
     social_master: SocialMasterCfg
     provenance: ProvenanceCfg
     acceptance: AcceptanceCfg
+    audiobook: AudiobookCfg
 
     @property
     def projects_root_path(self) -> Path:
@@ -232,6 +244,7 @@ def _build(data: dict[str, Any], config_path: Path, *, uses_external_config: boo
         social_master=SocialMasterCfg(**data["social_master"]),
         provenance=ProvenanceCfg(**data["provenance"]),
         acceptance=AcceptanceCfg(**data["acceptance"]),
+        audiobook=AudiobookCfg(**data.get("audiobook", {})),
     )
 
 

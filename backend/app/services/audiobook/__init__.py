@@ -2,8 +2,15 @@
 from app.services.audiobook.service import (
     AudiobookError,
     AudiobookService,
+    GenerationNotAuthorized,
     RecoveryBlocked,
     get_audiobook,
 )
 
-__all__ = ["AudiobookError", "AudiobookService", "RecoveryBlocked", "get_audiobook"]
+__all__ = [
+    "AudiobookError",
+    "AudiobookService",
+    "GenerationNotAuthorized",
+    "RecoveryBlocked",
+    "get_audiobook",
+]

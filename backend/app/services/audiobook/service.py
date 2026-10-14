@@ -1,9 +1,14 @@
-"""Audiobook slice service: import, annotate, chunk, render, assemble, approve.
+"""Audiobook slice service.
+
+Required operator sequence:
+    import -> annotate -> plan -> authorized render -> assemble -> listen ->
+    record review -> approve -> verify/export
+Live (non-fake) rendering is held server-side until explicitly authorized, and
+approval can never precede a listen-back of the current WAV/MP3 pair.
 
 Bounded scope: one locked chapter, verbatim speaker spans, deterministic chunks,
-WAV + MP3 delivery, byte-bound approval, and a minimal cancellation/recovery
-gate. It reuses ProjectStore (project directory), TTSClient (synthesis), and
-ModelRouter (cooperative GPU lease). No LLM adaptation, music, M4B, or general
+WAV + MP3 delivery, byte-bound approval, and a cancellation/recovery gate that
+holds shared ModelRouter capacity. No LLM adaptation, music, M4B, or general
 workflow engine is involved.
 """
 from __future__ import annotations
@@ -23,12 +28,14 @@ from app.models.audiobook import (
     Master,
     ManuscriptRef,
     RecoveryState,
+    Review,
     Speaker,
     SpeakerSpan,
     Exclusion,
 )
+from app.config import get_settings
 from app.services.audiobook import audio, coverage
-from app.services.model_router import get_router
+from app.services.model_router import CapacityHeld, HoldPersistenceError, get_router
 from app.services.project_store import get_store
 from app.services.tts_client import get_tts
 
@@ -44,8 +51,16 @@ class RecoveryBlocked(AudiobookError):
     """Rendering is blocked pending operator recovery of uncertain capacity."""
 
 
+class GenerationNotAuthorized(AudiobookError):
+    """A real (non-fake) render was requested while generation is unauthorized."""
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _chunk_signature(chunk) -> tuple:
+    return (chunk.id, chunk.span_id, chunk.speaker, chunk.text, chunk.start_char, chunk.end_char)
 
 
 class AudiobookService:
@@ -106,6 +121,7 @@ class AudiobookService:
         state.annotations = AnnotationSet()
         state.chunks = []
         state.master = None
+        state.review = None
         state.approval = None
         self.save(pid, state)
         return state
@@ -118,6 +134,7 @@ class AudiobookService:
             raise AudiobookError("speaker names must be unique")
         state.speakers = {speaker.name: speaker for speaker in speakers}
         state.approval = None
+        state.review = None
         self.save(pid, state)
         return state
 
@@ -135,6 +152,7 @@ class AudiobookService:
         if unknown:
             raise AudiobookError("annotations reference unknown speakers: " + ", ".join(unknown))
         state.annotations = candidate
+        state.review = None
         state.approval = None
         self.save(pid, state)
         return state
@@ -163,9 +181,23 @@ class AudiobookService:
                     continue
             merged.append(chunk)
         state.chunks = merged
+        state.review = None
         state.approval = None
         self.save(pid, state)
         return state
+
+    def _stale_reason(self, state: AudiobookState, text: str) -> str | None:
+        """Return a message when persisted chunks no longer match the annotations.
+
+        Guards both render and assembly: a chunk set planned against earlier
+        annotations (or edited on disk) must never be treated as current.
+        """
+        if not state.chunks:
+            return None
+        expected = coverage.plan_chunks(text, state.annotations)
+        if [_chunk_signature(chunk) for chunk in expected] != [_chunk_signature(chunk) for chunk in state.chunks]:
+            return "chunks are stale relative to the current annotations; re-plan chunks"
+        return None
 
     # --- rendering --------------------------------------------------
     async def _default_synth(self, text: str, voice: str, speed: float) -> bytes:
@@ -178,6 +210,11 @@ class AudiobookService:
         if state.recovery.blocked:
             raise RecoveryBlocked("render blocked pending operator recovery: "
                                   + (state.recovery.reason or "uncertain occupied capacity"))
+        if synth is None and not get_settings().audiobook.live_generation_authorized:
+            # Server-side live-generation hold: real TTS is refused. Injected
+            # fake synthesis used by isolated tests is unaffected.
+            raise GenerationNotAuthorized(
+                "live TTS generation is not authorized; no real render request is permitted")
         if state.manuscript is None:
             raise AudiobookError("import a chapter first")
         text = self.text(pid)
@@ -189,12 +226,18 @@ class AudiobookService:
             raise AudiobookError("unresolved attributions: " + ", ".join(unresolved))
         if not state.chunks:
             raise AudiobookError("plan chunks before rendering")
+        stale = self._stale_reason(state, text)
+        if stale:
+            raise AudiobookError(stale)
 
         synth = synth or self._default_synth
         should_cancel = should_cancel or (lambda: False)
         base = self._base(pid)
         job_id = uuid.uuid4().hex[:10]
-        await self.router.acquire(MODEL, job_id)
+        try:
+            await self.router.acquire(MODEL, job_id)
+        except CapacityHeld as exc:
+            raise RecoveryBlocked(str(exc)) from exc
         rendered = 0
         cancelled = False
         confirmed = True
@@ -222,14 +265,24 @@ class AudiobookService:
         finally:
             await self.router.release(MODEL, job_id, unload=False)
 
+        if rendered:
+            # New audio invalidates any prior listen-back / approval.
+            state.review = None
+            state.approval = None
         if cancelled and not confirmed:
-            state.recovery = RecoveryState(
-                blocked=True,
-                reason="cancelled render was not confirmed stopped; capacity is held until an operator clears it",
-                since=_now(),
-            )
-            self._event(pid, "RECOVERY_BLOCKED", {"reason": state.recovery.reason})
-            self.save(pid, state)
+            reason = ("cancelled render was not confirmed stopped; the shared GPU capacity is held "
+                      "until documented stop/drain evidence is recorded")
+            hold_persisted = True
+            try:
+                self.router.hold(MODEL, job_id, reason=reason, holder=pid)
+            except HoldPersistenceError as exc:
+                # Fail safe: the in-memory hold still blocks this process, but the
+                # operator must know that restart/cross-process protection is degraded.
+                hold_persisted = False
+                reason = f"{reason}; WARNING: shared hold not persisted ({exc})"
+            state.recovery = RecoveryState(blocked=True, reason=reason, since=_now())
+            self._event(pid, "RECOVERY_BLOCKED", {"reason": reason, "hold_persisted": hold_persisted})
+        self.save(pid, state)
         return {"cancelled": cancelled, "rendered": rendered,
                 "blocked": state.recovery.blocked, "state": state.model_dump(mode="json")}
 
@@ -240,12 +293,22 @@ class AudiobookService:
             raise AudiobookError("import a chapter first")
         if not state.chunks or any(chunk.status != ChunkStatus.rendered for chunk in state.chunks):
             raise AudiobookError("all chunks must be rendered before assembly")
+        text = self.text(pid)
+        errors = coverage.coverage_errors(len(text), state.annotations)
+        if errors:
+            raise AudiobookError("; ".join(errors))
+        stale = self._stale_reason(state, text)
+        if stale:
+            raise AudiobookError(stale)
         base = self._base(pid)
         paths = []
         for chunk in state.chunks:
             if not chunk.audio_file or not (base / chunk.audio_file).is_file():
                 raise AudiobookError(f"chunk {chunk.id} audio is missing")
-            paths.append(base / chunk.audio_file)
+            path = base / chunk.audio_file
+            if not chunk.sha256 or audio.sha256_file(path) != chunk.sha256:
+                raise AudiobookError(f"chunk {chunk.id} audio changed since it was rendered; re-render before assembly")
+            paths.append(path)
         wav_path, mp3_path = base / "master.wav", base / "master.mp3"
         audio.write_master_wav(paths, pause_ms, wav_path)
         audio.encode_mp3(wav_path, mp3_path)
@@ -255,6 +318,32 @@ class AudiobookService:
             chunk_versions=[{"id": chunk.id, "sha256": chunk.sha256} for chunk in state.chunks],
             annotation_version=state.annotations.version, pause_ms=pause_ms,
             loudness_target=None, created_at=_now(),
+        )
+        state.review = None
+        state.approval = None
+        self.save(pid, state)
+        return state
+
+    # --- listen-back review -----------------------------------------
+    def review(self, pid: str, *, listened_wav: bool, listened_mp3: bool,
+               note: str | None = None) -> AudiobookState:
+        """Record an operator listen-back of the current assembled master.
+
+        Binds the attestation to the exact WAV/MP3 bytes present now, so a later
+        byte change invalidates the review and approval cannot precede listening.
+        """
+        state = self.load(pid)
+        if state.master is None:
+            raise AudiobookError("assemble a master before reviewing")
+        base = self._base(pid)
+        wav_path, mp3_path = base / state.master.wav_file, base / state.master.mp3_file
+        if not wav_path.is_file() or not mp3_path.is_file():
+            raise AudiobookError("master files are missing")
+        if not (listened_wav and listened_mp3):
+            raise AudiobookError("both the WAV and MP3 master must be listened to before review")
+        state.review = Review(
+            wav_sha256=audio.sha256_file(wav_path), mp3_sha256=audio.sha256_file(mp3_path),
+            listened_wav=True, listened_mp3=True, note=note, reviewed_at=_now(),
         )
         state.approval = None
         self.save(pid, state)
@@ -268,7 +357,15 @@ class AudiobookService:
         wav_path, mp3_path = base / state.master.wav_file, base / state.master.mp3_file
         if not wav_path.is_file() or not mp3_path.is_file():
             raise AudiobookError("master files are missing")
+        # Approval may never precede listening: a review of the exact current
+        # WAV/MP3 pair is mandatory.
+        if state.review is None:
+            raise AudiobookError("assemble, then listen to the master before approving")
+        if not (state.review.listened_wav and state.review.listened_mp3):
+            raise AudiobookError("both the WAV and MP3 must be listened to before approving")
         wav_sha, mp3_sha = audio.sha256_file(wav_path), audio.sha256_file(mp3_path)
+        if state.review.wav_sha256 != wav_sha or state.review.mp3_sha256 != mp3_sha:
+            raise AudiobookError("master bytes changed since review; listen and review again before approving")
         state.approval = Approval(
             wav_sha256=wav_sha, mp3_sha256=mp3_sha,
             chunk_versions=state.master.chunk_versions,
@@ -301,23 +398,61 @@ class AudiobookService:
         return {"approved": not reasons, "reasons": reasons}
 
     # --- recovery ---------------------------------------------------
-    def clear_recovery(self, pid: str, note: str) -> AudiobookState:
+    def clear_recovery(self, pid: str, *, worker_stopped: bool, queue_drained: bool,
+                       evidence: str, note: str | None = None) -> AudiobookState:
+        """Clear a recovery hold only with documented stop/drain evidence.
+
+        A bare acknowledgement is insufficient: the operator must assert the
+        worker is stopped and its queue is drained and attach a durable evidence
+        reference. The shared, persisted ModelRouter hold is released here so
+        competing acquisition across projects resumes.
+        """
+        if not (worker_stopped and queue_drained):
+            raise AudiobookError("recovery cannot be cleared: confirm the worker is stopped and its queue is drained")
+        if not evidence or len(evidence.strip()) < 10:
+            raise AudiobookError("recovery cannot be cleared: documented stop/drain evidence is required")
         state = self.load(pid)
+        router_hold = self.router.held(MODEL)
+        owns_hold = bool(router_hold and router_hold.get("holder") == pid)
+        if not state.recovery.blocked and not owns_hold:
+            raise AudiobookError("no active recovery hold for this project")
         prior = state.recovery.reason
-        self._event(pid, "RECOVERY_CLEARED", {"note": note, "prior_reason": prior})
+        cleared = False
+        if owns_hold or router_hold is None:
+            try:
+                cleared = self.router.clear_hold(MODEL, holder=pid)
+            except HoldPersistenceError as exc:
+                # Keep the recovery blocked rather than claim a release that did not persist.
+                raise AudiobookError(f"could not release the shared capacity hold: {exc}") from exc
+        self._event(pid, "RECOVERY_CLEARED", {
+            "worker_stopped": worker_stopped, "queue_drained": queue_drained,
+            "evidence": evidence, "note": note, "prior_reason": prior,
+            "shared_hold_released": cleared,
+        })
         state.recovery = RecoveryState(blocked=False, reason=None, since=None)
         self.save(pid, state)
         return state
 
     # --- status -----------------------------------------------------
+    def chapter(self, pid: str) -> dict:
+        """Return the locked manuscript text for the editor display."""
+        state = self.load(pid)
+        if state.manuscript is None:
+            return {"imported": False, "text": "", "manuscript": None}
+        return {"imported": True, "text": self.text(pid),
+                "manuscript": state.manuscript.model_dump(mode="json")}
+
     def status(self, pid: str) -> dict:
         state = self.load(pid)
         text_len = state.manuscript.char_count if state.manuscript else 0
+        hold = self.router.held(MODEL)
         return {
             "state": state.model_dump(mode="json"),
             "coverage_errors": coverage.coverage_errors(text_len, state.annotations) if state.manuscript else [],
             "unresolved_spans": coverage.unresolved_span_ids(state.annotations),
             "verification": self.verify_approval(pid),
+            "live_generation_authorized": get_settings().audiobook.live_generation_authorized,
+            "capacity_hold": hold if (hold and hold.get("holder") == pid) else None,
         }
 
 

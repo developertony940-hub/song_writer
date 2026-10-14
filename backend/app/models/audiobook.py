@@ -94,6 +94,21 @@ class Approval(BaseModel):
     approved_at: str
 
 
+class Review(BaseModel):
+    """A recorded listen-back of the assembled master.
+
+    Binds the operator's attestation to the exact WAV/MP3 bytes present at
+    review time. A later byte change invalidates the review, so approval can
+    never precede listening.
+    """
+    wav_sha256: str
+    mp3_sha256: str
+    listened_wav: bool
+    listened_mp3: bool
+    note: str | None = None
+    reviewed_at: str
+
+
 class RecoveryState(BaseModel):
     blocked: bool = False
     reason: str | None = None
@@ -106,6 +121,7 @@ class AudiobookState(BaseModel):
     annotations: AnnotationSet = Field(default_factory=AnnotationSet)
     chunks: list[Chunk] = Field(default_factory=list)
     master: Master | None = None
+    review: Review | None = None
     approval: Approval | None = None
     recovery: RecoveryState = Field(default_factory=RecoveryState)
 
@@ -134,5 +150,21 @@ class AssembleRequest(BaseModel):
     pause_ms: int = Field(300, ge=0, le=5000)
 
 
+class ReviewRequest(BaseModel):
+    """Operator listen-back attestation for the current assembled master."""
+    listened_wav: bool
+    listened_mp3: bool
+    note: str | None = Field(None, max_length=500)
+
+
 class ClearRecoveryRequest(BaseModel):
-    note: str = Field(min_length=3, max_length=500)
+    """Documented stop/drain evidence required to clear a recovery hold.
+
+    A bare acknowledgement is insufficient: the operator must assert that the
+    worker is stopped and its queue is drained, and attach a durable evidence
+    reference (log path, command, ticket id, etc.).
+    """
+    worker_stopped: bool
+    queue_drained: bool
+    evidence: str = Field(min_length=10, max_length=2000)
+    note: str | None = Field(None, max_length=500)

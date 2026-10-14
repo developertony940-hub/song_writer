@@ -79,6 +79,14 @@ sequential_phasing = true
 # LOCALAI_ACCEPTANCE_SIGNING_SECRET environment variable (or a gitignored local config).
 signing_secret = ""
 
+[audiobook]
+# Phase 1 live-generation hold. While false, the audiobook API refuses real TTS
+# render requests server-side; deterministic fake synthesis used by isolated
+# tests is unaffected. Override with
+# LOCALAI_AUDIOBOOK__LIVE_GENERATION_AUTHORIZED=true only when live generation
+# is explicitly authorized.
+live_generation_authorized = false
+
 [provenance]
 # Bump only when the persisted metadata contract changes incompatibly.
 schema_version = 1
