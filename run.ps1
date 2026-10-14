@@ -11,7 +11,7 @@ Set-Location -LiteralPath $PSScriptRoot\backend
 
 if (-not (Test-Path -LiteralPath ".venv")) {
     Write-Host "Creating virtualenv..."
-    py -3.11 -m venv .venv
+    py -m venv .venv
 }
 
 & ".\.venv\Scripts\Activate.ps1"
