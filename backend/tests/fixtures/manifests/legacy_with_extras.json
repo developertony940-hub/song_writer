@@ -1,0 +1,27 @@
+{
+  "id": "bbbbbbbbbbbb",
+  "name": "Legacy With Extras",
+  "brief": "Contains unknown root keys and unknown nested sub-keys.",
+  "brand_voice": "professional",
+  "target_audience": "general",
+  "notes": "",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "mode": "manual",
+  "stages": {
+    "copy": "pending",
+    "images": "pending",
+    "video": "pending",
+    "audio": "pending",
+    "final": "pending",
+    "custom_stage": "pending"
+  },
+  "artifacts": {
+    "copy_plan": null,
+    "custom_artifact": "keep-me"
+  },
+  "legacy_extra_root": {
+    "nested": [1, 2, 3]
+  },
+  "legacy_flag": true
+}

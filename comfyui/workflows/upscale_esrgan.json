@@ -1,0 +1,48 @@
+{
+  "_comment": "Real-ESRGAN video upscale workflow. Loads a video from input folder, upscales each frame with RealESRGAN_x2plus (720x1280 -> 1440x2560), then scales down to max dimension 1920 (1080x1920) and re-encodes to H264 mp4. Node ids: 1=VHS_LoadVideo, 2=UpscaleModelLoader, 3=ImageUpscaleWithModel, 4=ImageScaleToMaxDimension (1080x1920), 5=VHS_VideoCombine.",
+  "1": {
+    "class_type": "VHS_LoadVideo",
+    "inputs": {
+      "video": "input.mp4",
+      "force_rate": 0,
+      "custom_width": 0,
+      "custom_height": 0,
+      "frame_load_cap": 0,
+      "skip_first_frames": 0,
+      "select_every_nth": 1
+    }
+  },
+  "2": {
+    "class_type": "UpscaleModelLoader",
+    "inputs": {
+      "model_name": "RealESRGAN_x2plus.pth"
+    }
+  },
+  "3": {
+    "class_type": "ImageUpscaleWithModel",
+    "inputs": {
+      "upscale_model": ["2", 0],
+      "image": ["1", 0]
+    }
+  },
+  "4": {
+    "class_type": "ImageScaleToMaxDimension",
+    "inputs": {
+      "image": ["3", 0],
+      "upscale_method": "lanczos",
+      "largest_size": 1920
+    }
+  },
+  "5": {
+    "class_type": "VHS_VideoCombine",
+    "inputs": {
+      "images": ["4", 0],
+      "frame_rate": 16,
+      "loop_count": 0,
+      "filename_prefix": "upscaled",
+      "format": "video/h264-mp4",
+      "pingpong": false,
+      "save_output": true
+    }
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "_comment": "FLUX.1-dev fp8 img2img workflow for character-reference consistency. Node ids: 6=positive prompt, 7=negative prompt, 1=LoadImage (reference image), 61=VAEEncode (reference->latent), 25=KSampler (seed+steps+denoise), 27=VAEDecode, 26=SaveImage. Uses CheckpointLoaderSimple (fp8 checkpoint, MODEL+VAE) and DualCLIPLoader (clip_l + t5xxl_fp8). LoadImage accepts uploaded file name; VAEEncode converts to latent; denoise < 1 preserves reference identity while prompt drives the scene.",
+  "5": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "flux1-dev-fp8.safetensors"
+    }
+  },
+  "11": {
+    "class_type": "DualCLIPLoader",
+    "inputs": {
+      "clip_name1": "clip_l.safetensors",
+      "clip_name2": "t5xxl_fp8_e4m3fn.safetensors",
+      "type": "flux"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "positive prompt",
+      "clip": ["11", 0]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "negative prompt",
+      "clip": ["11", 0]
+    }
+  },
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "reference.png",
+      "upload": "image"
+    }
+  },
+  "61": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["1", 0],
+      "vae": ["5", 2]
+    }
+  },
+  "25": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 20,
+      "cfg": 1.0,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.5,
+      "model": ["5", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["61", 0]
+    }
+  },
+  "27": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["25", 0],
+      "vae": ["5", 2]
+    }
+  },
+  "26": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "flux_img2img",
+      "images": ["27", 0]
+    }
+  }
+}

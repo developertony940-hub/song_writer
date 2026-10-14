@@ -1,0 +1,82 @@
+# Copy this file outside the repository (or to settings.local.toml), customize it,
+# then launch with LOCALAI_CONFIG=/absolute/path/to/settings.local.toml.
+# When selected through LOCALAI_CONFIG, a relative app.projects_root is resolved
+# from this TOML file's directory. Use an absolute path to opt out.
+# Alternatively override one value without a private file:
+#   LOCALAI_PROJECTS_ROOT=D:\LocalAIContent\projects
+#   LOCALAI_RUNTIME__LMSTUDIO__DEFAULT_MODEL=exact-loaded-model-id
+#   LOCALAI_FFMPEG_BINARY=ffmpeg.exe
+# Values below are portable defaults; they contain no machine-specific paths or secrets.
+
+[app]
+name = "LocalAIContent"
+version = "0.1.0"
+host = "127.0.0.1"
+port = 8000
+projects_root = "projects"
+
+[runtime.lmstudio]
+base_url = "http://127.0.0.1:1234/v1"
+gpu = 0
+request_timeout_s = 300
+default_model = "qwen3-coder-30b-a3b-instruct"
+vision_model = "qwen2.5-vl-32b-instruct"
+
+[runtime.comfyui]
+base_url = "http://127.0.0.1:8188"
+gpu = 1
+poll_interval_s = 2
+request_timeout_s = 7200
+workflow_image = "flux_dev_fp8"
+workflow_i2v = "wan21_i2v_14b_fp8"
+workflow_t2v = "wan21_t2v_14b_fp8"
+workflow_image_img2img = ""
+workflow_image_pulid = ""
+workflow_upscale = ""
+
+[runtime.tts]
+engine = "kokoro"
+base_url = "http://127.0.0.1:9880"
+default_voice = "af_heart"
+sample_rate = 24000
+
+[runtime.ffmpeg]
+binary = "ffmpeg"
+ffprobe_binary = "ffprobe"
+default_video_codec = "libx264"
+default_audio_codec = "aac"
+default_image_format = "webp"
+process_timeout_s = 7200
+
+[social_master]
+profile_id = "vertical-social-h264-aac-rec709"
+profile_version = "1.0.0"
+width = 1080
+height = 1920
+fps = 30
+duration_s = 30.0
+video_codec = "libx264"
+video_bitrate = "10M"
+audio_codec = "aac"
+audio_bitrate = "224k"
+audio_sample_rate = 48000
+audio_channels = 2
+pix_fmt = "yuv420p"
+color_space = "bt709"
+color_primaries = "bt709"
+color_trc = "bt709"
+
+[vram]
+strategy = "auto_split"
+gpu0_capacity_mb = 24576
+gpu1_capacity_mb = 24576
+reserve_mb = 2048
+sequential_phasing = true
+
+[acceptance]
+# Leave empty in tracked examples. For real acceptance, prefer the private
+# LOCALAI_ACCEPTANCE_SIGNING_SECRET environment variable (or a gitignored local config).
+signing_secret = ""
+
+[provenance]
+schema_version = 1

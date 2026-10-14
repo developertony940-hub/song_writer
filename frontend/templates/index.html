@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ settings.name }} - Local AI Content Studio</title>
+  <link rel="stylesheet" href="/static/app.css?v=10">
+</head>
+<body>
+  <header class="topbar">
+    <h1>Local AI Content Studio</h1>
+    <div class="status" id="runtime-status">checking runtimes…</div>
+  </header>
+
+  <main class="layout">
+    <!-- Left: project list -->
+    <aside class="sidebar">
+      <h2>Projects</h2>
+      <button id="new-project-btn" class="primary">+ New Project</button>
+      <ul id="project-list" class="project-list"></ul>
+    </aside>
+
+    <!-- Center: project workspace -->
+    <section class="workspace" id="workspace">
+      <div id="empty-state" class="empty">
+        <p>Select or create a project to begin.</p>
+      </div>
+      <div id="project-view" hidden>
+        <div class="proj-header">
+          <h2 id="proj-name"></h2>
+          <p id="proj-brief" class="muted"></p>
+        </div>
+
+        <nav class="tabs" id="tabs">
+          <button data-tab="copy" class="tab active">1 · Copy</button>
+          <button data-tab="images" class="tab">2 · Images</button>
+          <button data-tab="video" class="tab">3 · Video</button>
+          <button data-tab="audio" class="tab">4 · Audio</button>
+          <button data-tab="final" class="tab">5 · Assemble</button>
+          <button data-tab="timeline" class="tab">Timeline</button>
+          <button data-tab="brief" class="tab">Brief</button>
+        </nav>
+        <div class="stage-status" id="stage-status"></div>
+
+        <!-- Copy tab -->
+        <section class="tab-panel active" data-panel="copy">
+          <div class="gen-form">
+            <textarea id="copy-prompt" rows="3" placeholder="Describe the copy you want (hero text, product description, SEO meta…)"></textarea>
+            <div class="row">
+              <label>Model <select id="copy-model"><option value="">(loading…)</option></select></label>
+              <label>Max Tokens <input id="copy-maxtokens" type="number" value="4096" min="64" step="64" style="width:110px"></label>
+              <input id="copy-saveas" placeholder="save as (e.g. hero.md)">
+              <button id="gen-copy-btn" class="primary">Generate Copy</button>
+              <button id="approve-copy-btn" class="approve-btn" data-stage="copy">Approve Copy</button>
+            </div>
+          </div>
+          <div class="gen-form">
+            <div class="row" style="justify-content:space-between">
+              <h3 style="margin:0">Generated Copy</h3>
+              <div class="row">
+                <select id="copy-view" style="width:auto;min-width:180px">
+                  <option value="">— select copy asset —</option>
+                </select>
+                <button id="copy-refresh-btn" class="primary">Refresh</button>
+              </div>
+            </div>
+            <pre id="copy-output" class="copy-output">No copy generated yet.</pre>
+          </div>
+          <div id="copy-assets" class="asset-grid"></div>
+          <div class="gen-form phase2-plan">
+            <h3>Phase 2 · Canonical VideoPlan</h3>
+            <p class="muted">Paste a validated JSON production plan. Its timed scenes are the single source for narration, captions, stills, motion, proxy and master.</p>
+            <textarea id="plan-json" rows="13" spellcheck="false" aria-label="VideoPlan JSON">{
+  "platform": "tiktok", "target_duration_s": 10, "hook": "Stop scrolling", "cta": "Try it today",
+  "scenes": [
+    {"id":"hook","start_s":0,"end_s":5,"voiceover":"Stop scrolling. See the difference.","caption":"Stop scrolling. See the difference.","visual_prompt":"Vertical cinematic product reveal with generous caption-safe space.","motion_prompt":"Slow push in, subtle natural product motion."},
+    {"id":"cta","start_s":5,"end_s":10,"voiceover":"Try it today.","caption":"Try it today.","visual_prompt":"Vertical cinematic confident call to action, clean background.","motion_prompt":"Gentle camera settle and optimistic motion."}
+  ]
+}</textarea>
+            <div class="row"><button id="plan-draft-btn">Generate VideoPlan Draft</button><button id="plan-save-btn" class="primary">Save VideoPlan</button><button id="plan-images-btn">Generate Image Candidates</button><button id="plan-videos-btn">Generate Motion Candidates</button><button id="plan-audio-btn">Generate Plan Audio</button></div>
+            <div id="plan-status" class="muted"></div><div id="candidate-assets" class="asset-grid"></div>
+          </div>
+        </section>
+
+        <!-- Images tab -->
+        <section class="tab-panel" data-panel="images" hidden>
+          <div class="gen-form">
+            <textarea id="img-prompt" rows="3" placeholder="Image prompt (FLUX)"></textarea>
+            <textarea id="img-neg" rows="2" placeholder="Negative prompt (optional)"></textarea>
+            <div class="row">
+              <label>W <input id="img-w" type="number" value="1080" step="64"></label>
+              <label>H <input id="img-h" type="number" value="1920" step="64"></label>
+              <label>Steps <input id="img-steps" type="number" value="20"></label>
+              <label>Seed <input id="img-seed" type="number" placeholder="auto"></label>
+              <input id="img-saveas" placeholder="save as">
+              <button id="gen-image-btn" class="primary">Generate Image</button>
+              <button id="approve-images-btn" class="approve-btn" data-stage="images">Approve Images</button>
+            </div>
+            <div class="row" style="margin-top:8px">
+              <label>Character ref <select id="img-ref"><option value="">(none — fresh character)</option></select></label>
+              <label>Denoise <input id="img-denoise" type="number" value="0.5" step="0.05" min="0" max="1" style="width:70px"></label>
+              <span class="muted" style="font-size:11px">Set a ref image + denoise &lt;1 to keep the same face across scenes</span>
+            </div>
+            <div class="row" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+              <input type="file" id="img-upload" accept="image/*">
+              <input id="img-upload-saveas" placeholder="save as (e.g. book_cover.png)">
+              <button id="img-upload-btn" class="primary">Upload Image</button>
+              <button id="img-rescan-btn">Rescan Folder</button>
+            </div>
+          </div>
+          <div id="image-assets" class="asset-grid"></div>
+        </section>
+
+        <!-- Video tab -->
+        <section class="tab-panel" data-panel="video" hidden>
+          <div class="gen-form">
+            <label>Mode:
+              <select id="vid-mode">
+                <option value="image_to_video">Image → Video (Wan I2V)</option>
+                <option value="text_to_video">Text → Video (Wan T2V)</option>
+              </select>
+            </label>
+            <label>Source image (for I2V):
+              <select id="vid-source">
+                <option value="">— select image —</option>
+              </select>
+            </label>
+            <textarea id="vid-prompt" rows="3" placeholder="Video prompt / motion description"></textarea>
+            <div class="row">
+              <label>Dur(s) <input id="vid-dur" type="number" value="5" step="0.5"></label>
+              <label>FPS <input id="vid-fps" type="number" value="16"></label>
+              <label>W <input id="vid-w" type="number" value="720" step="64"></label>
+              <label>H <input id="vid-h" type="number" value="1280" step="64"></label>
+              <input id="vid-saveas" placeholder="save as">
+              <button id="gen-video-btn" class="primary">Generate Video</button>
+              <button id="approve-video-btn" class="approve-btn" data-stage="video">Approve Video</button>
+            </div>
+          </div>
+          <div id="video-assets" class="asset-grid"></div>
+          <div class="gen-form" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:1rem">
+            <h3>Upscale Video (Real-ESRGAN)</h3>
+            <div class="row">
+              <input id="ups-src" placeholder="video asset id to upscale">
+              <label>Model <select id="ups-model">
+                <option value="RealESRGAN_x2plus.pth">RealESRGAN_x2plus (x2)</option>
+                <option value="RealESRGAN_x4plus.pth">RealESRGAN_x4plus (x4)</option>
+              </select></label>
+              <label>Target <input id="ups-target" type="number" value="1920"></label>
+              <input id="ups-saveas" placeholder="save as">
+              <button id="upscale-btn" class="primary">Upscale Video</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Audio tab -->
+        <section class="tab-panel" data-panel="audio" hidden>
+          <div class="gen-form">
+            <textarea id="aud-text" rows="4" placeholder="Text to speak"></textarea>
+            <div class="row">
+              <input id="aud-voice" placeholder="voice (default)">
+              <label>Speed <input id="aud-speed" type="number" value="1" step="0.1"></label>
+              <input id="aud-saveas" placeholder="save as">
+              <button id="gen-audio-btn" class="primary">Generate Audio</button>
+              <button id="approve-audio-btn" class="approve-btn" data-stage="audio">Approve Audio</button>
+            </div>
+          </div>
+          <div id="audio-assets" class="asset-grid"></div>
+        </section>
+
+        <!-- Final assembly tab -->
+        <section class="tab-panel" data-panel="final" hidden>
+          <div class="gen-form">
+            <label>Video <select id="asm-video"><option value="">— select video —</option></select></label>
+            <label>Audio <select id="asm-audio"><option value="">— select audio —</option></select></label>
+            <label>Music <select id="asm-music"><option value="">— none —</option></select></label>
+            <input id="asm-subs" placeholder="subtitle text (optional)">
+            <input id="asm-out" placeholder="output name" value="final">
+            <button id="assemble-btn" class="primary">Assemble Final</button>
+            <button id="approve-final-btn" class="approve-btn" data-stage="final">Approve Final</button>
+          </div>
+          <div id="final-assets" class="asset-grid"></div>
+        </section>
+
+        <!-- Timeline tab -->
+        <section class="tab-panel" data-panel="timeline" hidden>
+          <div class="timeline-wrap">
+            <div class="row" style="margin-bottom:10px">
+              <label>Total duration (s) <input id="tl-duration" type="number" value="30" step="0.5" min="1"></label>
+              <button id="tl-save-btn" class="primary">Save Timeline</button>
+              <input id="tl-output-name" value="timeline_master" aria-label="Timeline master output name" style="width:150px">
+              <button id="tl-render-master" class="primary">Render Saved Timeline Master</button>
+              <button id="tl-add-sub" class="primary">+ Subtitle</button>
+              <button id="tl-render-preview" class="primary">Render Preview Frame</button>
+              <label>Preview time <input id="tl-time" type="number" value="2" step="0.5" min="0"></label>
+            </div>
+            <div class="gen-form">
+              <h3>Plan review gate</h3><p class="muted">A master is unavailable until this exact proxy is explicitly approved. Any plan, review, candidate, or audio change invalidates that approval.</p>
+              <input id="plan-preview-name" value="plan_preview" aria-label="Proxy output name"><button id="plan-preview-btn" class="primary">Render Plan Proxy</button><button id="plan-approve-preview-btn">Approve Selected Proxy</button><input id="plan-master-name" value="final_master" aria-label="Plan master output name"><button id="plan-master-btn" class="primary">Render Approved Plan Master</button>
+              <div id="plan-preview-assets" class="asset-grid"></div>
+            </div>
+            <div id="tl-tracks" class="tl-tracks"></div>
+            <div id="tl-preview" class="tl-preview" hidden></div>
+          </div>
+        </section>
+
+        <!-- Brief tab -->
+        <section class="tab-panel" data-panel="brief" hidden>
+          <div class="gen-form">
+            <label>Name <input id="brf-name"></label>
+            <label>Brand Voice <input id="brf-voice"></label>
+            <label>Target Audience <input id="brf-audience"></label>
+            <textarea id="brf-brief" rows="4" placeholder="Content brief"></textarea>
+            <textarea id="brf-notes" rows="2" placeholder="Notes"></textarea>
+            <button id="save-brief-btn" class="primary">Save Brief</button>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <div id="progress" class="progress" hidden>
+    <div class="progress-bar" id="progress-bar"></div>
+    <span id="progress-label">Working…</span>
+  </div>
+  <script src="/static/app.js?v=16"></script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,38 @@
+
+# Downloaded AI models
+/models/
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# Runtime-generated project state. Keep the empty directory placeholder only;
+# manifests, plans, reviews, and media can contain user content and must not be committed.
+/projects/*
+!/projects/.gitkeep
+
+# Generated ComfyUI previews
+/comfyui/workflows/*_output.*
+
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# JavaScript dependencies
+node_modules/
+
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+# Private runtime overrides (the portable example is tracked).
+backend/app/config/settings.local.toml
+settings.local.toml
+
+# Temporary files
+*.tmp
+*.log
+.DS_Store
+Thumbs.db

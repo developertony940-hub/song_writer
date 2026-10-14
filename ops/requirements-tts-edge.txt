@@ -1,0 +1,5 @@
+# Optional networked Edge TTS service (ops/edge_tts_server.py).
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.4
+edge-tts==7.0.2

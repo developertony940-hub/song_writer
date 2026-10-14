@@ -1,0 +1,3 @@
+# Offline test dependencies. Install this file to develop or run CI.
+-r requirements.txt
+pytest==8.3.5

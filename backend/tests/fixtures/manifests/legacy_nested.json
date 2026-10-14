@@ -1,0 +1,27 @@
+{
+  "id": "cccccccccccc",
+  "name": "Legacy Nested",
+  "brief": "Contains authoritative nested structures with stale sub-keys.",
+  "brand_voice": "professional",
+  "target_audience": "general",
+  "notes": "",
+  "created_at": "2026-01-01T00:00:00Z",
+  "updated_at": "2026-01-01T00:00:00Z",
+  "mode": "auto",
+  "artifacts": {
+    "copy_plan": "asset0001",
+    "image_plan": null
+  },
+  "composition": {
+    "total_duration_s": 30.0,
+    "video_clips": [],
+    "audio_clips": [],
+    "subtitles": [],
+    "junk_key": "stale"
+  },
+  "preview_approval": {
+    "preview_asset_id": "prev0",
+    "approved_at": "2026-01-02T00:00:00Z"
+  },
+  "video_plan": null
+}

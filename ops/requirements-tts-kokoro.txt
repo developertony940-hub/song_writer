@@ -1,0 +1,9 @@
+# Local/offline Kokoro TTS service (ops/kokoro_server.py).
+# Install into a dedicated TTS virtual environment; PyTorch wheels are platform/GPU specific.
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.4
+numpy==2.2.5
+kokoro==0.9.4
+# Use the PyTorch index appropriate for the selected CUDA/CPU platform.
+torch==2.7.0
