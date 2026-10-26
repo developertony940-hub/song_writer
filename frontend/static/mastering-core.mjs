@@ -2,6 +2,19 @@ export const copy = value => JSON.parse(JSON.stringify(value));
 export function time(seconds) { const n=Math.max(0,Number(seconds)||0); return `${String(Math.floor(n/60)).padStart(2,'0')}:${(n%60).toFixed(3).padStart(6,'0')}`; }
 export function duration(sections) { return sections.reduce((s,c)=>s+Number(c.end_s)-Number(c.start_s),0); }
 export function bound(sections) { let t=0; return sections.map(c=>{ const row={...c,master_start_s:t,master_end_s:t+c.end_s-c.start_s};t=row.master_end_s;return row; }); }
+// Ripple insertion changes order only. Never trim or replace a neighbouring clip.
+export function insertClip(sections,clip,placement='append',anchorId=null) {
+  if(!['append','before','after'].includes(placement))throw Error('Choose append, insert before, or insert after.');
+  if(sections.some(c=>c.clip_id===clip.clip_id))throw Error('Inserted section must have a new identifier.');
+  if(!Number.isFinite(clip.start_s)||!Number.isFinite(clip.end_s)||clip.end_s<=clip.start_s)throw Error('Inserted section must have a positive finite duration.');
+  let index=sections.length;
+  if(placement!=='append'){
+    index=sections.findIndex(c=>c.clip_id===anchorId);
+    if(index<0)throw Error('Insertion anchor no longer exists. Choose a destination again.');
+    if(placement==='after')index++;
+  }
+  const result=copy(sections);result.splice(index,0,copy(clip));return result;
+}
 export function confirmation(c) { return !!(c.confirmation?.confirmed && c.confirmation.source_sha256===c.source_id && c.confirmation.start_s===c.start_s && c.confirmation.end_s===c.end_s); }
 export function invalidate(c) { return {...c,confirmation:{confirmed:false,source_sha256:c.source_id,start_s:c.start_s,end_s:c.end_s}}; }
 export function recipeSections(sections) { return sections.map(c=>({clip_id:c.clip_id,source_id:c.source_id,label:c.label,start_s:c.start_s,end_s:c.end_s,gain_db:c.gain_db,fade_in_s:c.fade_in_s,fade_out_s:c.fade_out_s,confirmation:{confirmed:c.confirmation?.confirmed===true,source_sha256:c.source_id,start_s:c.confirmation?.start_s,end_s:c.confirmation?.end_s}})); }
