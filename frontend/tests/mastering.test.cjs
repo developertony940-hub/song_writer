@@ -1,0 +1,16 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+let core;
+const ready=import('../static/mastering-core.mjs').then(m=>core=m);
+const sha='a'.repeat(64);
+const source={source_id:sha,duration_s:30};
+const clip=()=>({clip_id:'one',source_id:sha,label:'Verse',start_s:2,end_s:12,gain_db:0,fade_in_s:.1,fade_out_s:.1,confirmation:{confirmed:true,source_sha256:sha,start_s:2,end_s:12}});
+test('time formatting and measured duration',async()=>{await ready;assert.equal(core.time(185),'03:05.000');assert.equal(core.duration([clip(),clip()]),20);});
+test('master positions are derived separately from source positions',async()=>{await ready;const rows=core.bound([clip(),{...clip(),clip_id:'two',start_s:15,end_s:20}]);assert.equal(rows[1].master_start_s,10);assert.equal(rows[1].start_s,15);assert.equal(rows[1].master_end_s,15);});
+test('confirmation is exact source and range bound',async()=>{await ready;assert.ok(core.confirmation(clip()));assert.ok(!core.confirmation({...clip(),end_s:13}));assert.ok(!core.confirmation({...clip(),source_id:'b'.repeat(64)}));});
+test('split preserves source and invalidates both confirmations',async()=>{await ready;const before=clip(),parts=core.splitClip(before,6,['a','b']);assert.deepEqual(parts.map(c=>[c.start_s,c.end_s]),[[2,6],[6,12]]);assert.equal(parts[0].fade_out_s,0);assert.equal(parts[1].fade_in_s,0);assert.ok(parts.every(c=>!core.confirmation(c)));assert.equal(before.end_s,12);});
+test('invalid splits refused',async()=>{await ready;for(const at of [2,12,NaN,-1])assert.throws(()=>core.splitClip(clip(),at,['a','b']));});
+test('save requires confirmed bounded finite source clips',async()=>{await ready;assert.ok(core.validate([clip()],[source]));for(const change of [{start_s:-1},{end_s:31},{gain_db:13},{fade_in_s:11},{end_s:Infinity},{confirmation:null}])assert.throws(()=>core.validate([{...clip(),...change}],[source]));assert.throws(()=>core.validate([clip(),clip()],[source]));assert.throws(()=>core.validate([clip()],[]));});
+test('undo and redo preserve exact recipes without mutating prior state',async()=>{await ready;const history=new core.EditHistory(),original=[clip()];history.push(original);const edited=[{...clip(),gain_db:-3}];const restored=history.undo(edited);assert.deepEqual(restored,original);assert.deepEqual(history.redo(restored),edited);restored[0].label='different';assert.equal(original[0].label,'Verse');});
+test('new edit discards redo only, not saved revision records',async()=>{await ready;const h=new core.EditHistory();h.push([clip()]);h.undo([]);h.push([{...clip(),label:'new'}]);assert.equal(h.future.length,0);});
+test('saved normalized recipes serialize back to strict write contract without server evidence fields',async()=>{await ready;const c={...clip(),source_sha256:sha,start_frame:96000,end_frame:576000};c.confirmation.confirmed_at='date';c.confirmation.clip_sha256='record';const request=core.recipeSections([c])[0];assert.equal(request.start_frame,undefined);assert.equal(request.source_sha256,undefined);assert.equal(request.confirmation.clip_sha256,undefined);assert.ok(core.confirmation(request));});

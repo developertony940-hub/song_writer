@@ -73,11 +73,16 @@ class InputReviewTests(unittest.TestCase):
         warnings = review(musical_direction="Country. Duration: 5 minutes, 180 BPM.", duration_s=300)
         self.assertNotIn("duration_conflict", {w["code"] for w in warnings})
 
-    def test_density_warning_remains_for_complete_sheet(self):
+    def test_short_lines_do_not_use_legacy_six_seconds_per_line(self):
         lyrics = "[Verse 1]\n" + "A sung line\n" * 64
         warnings = review(lyrics=lyrics, duration_s=300)
+        self.assertEqual(warnings, [])
+
+    def test_density_warning_remains_for_dense_complete_sheet(self):
+        lyrics = "[Verse 1]\n" + "Extraordinary unforgettable imagination neverending\n" * 180
+        warnings = review(lyrics=lyrics, duration_s=300)
         self.assertEqual([w["code"] for w in warnings], ["lyric_density_high"])
-        self.assertIn("64 lyric lines", warnings[0]["message"])
+        self.assertIn("180 lyric lines", warnings[0]["message"])
 
     def test_inputs_and_stanza_breaks_are_not_mutated(self):
         args = dict(lyrics="[Bridge]\nFirst\nSecond\n\nThird\nFourth\n",
@@ -120,8 +125,13 @@ class ExtractedServiceContractTests(unittest.TestCase):
 
     def test_service_preflight_uses_shared_review(self):
         settings = SimpleNamespace(lyrics="[Verse 1]\nOne\nTwo\n", musical_direction="Country",
-                                   duration_s=12, arrangement={"Verse 1": "gentle"})
-        self.assertEqual(self.ns["_preflight"](None, settings), [])
+                                   duration_s=12, arrangement={"Verse 1": "gentle"}, bpm=80)
+        result = self.ns["_preflight"](None, settings)
+        self.assertEqual(result, review_music_inputs(
+            lyrics=settings.lyrics, musical_direction=settings.musical_direction,
+            duration_s=settings.duration_s, arrangement=settings.arrangement,
+            known_sections=KNOWN, seconds_per_line=6, bpm=settings.bpm))
+        self.assertEqual(result[0]["estimate"]["tempo_source"], "settings")
 
     def test_existing_workflow_transport_keeps_stanzas_and_distinct_guidance(self):
         lyrics = "[Bridge]\r\nOne\r\nTwo\r\n\r\nThree\r\nFour\r\n"

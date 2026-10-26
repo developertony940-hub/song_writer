@@ -2,6 +2,19 @@
 
 Local FastAPI orchestration for copy, images, video, audio, and FFmpeg delivery masters. Every project has a filesystem-backed manifest and asset registry.
 
+## Song section editing and master revisions
+
+The Music panel links to **Open mastering workspace** at `/mastering`.
+This local, nondestructive editor provides waveform interval playback, section
+trim/split/reorder, gain/fades, undo/redo, immutable edit revisions, and lossless
+WAV plus once-encoded MP3 masters. Originals are preserved. It does not generate
+missing lyrics or authorize AI submissions. See [the editor guide](docs/MASTER-AUDIO.md)
+and [readiness limits](docs/MUSIC-READINESS.md).
+
+Syncing this source does not update a running nonreloading backend. A controlled
+local reload/restart requires separate permission. No dependency installation,
+model loading, or generation is needed simply to fetch these changes.
+
 ## Runtime model
 
 - **GPU0:** LM Studio and Kokoro. song_writer serializes its own GPU0 jobs, but LM Studio's OpenAI-compatible API has no verified model-unload endpoint; its reported GPU residency is therefore **advisory**.

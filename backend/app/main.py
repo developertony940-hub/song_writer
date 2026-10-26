@@ -16,6 +16,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
 from app.routers import assets, audiobook, generate, music, profiles, projects, replacement, runtime
+from app.routers import master_audio, music_readiness
 from app.services.comfyui_client import get_comfyui
 from app.services.lmstudio_client import get_lmstudio
 from app.services.model_router import get_router
@@ -72,6 +73,8 @@ def create_app() -> FastAPI:
     app.include_router(music.router)
     app.include_router(profiles.router)
     app.include_router(replacement.router)
+    app.include_router(master_audio.router)
+    app.include_router(music_readiness.router)
 
     # Frontend
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -86,6 +89,10 @@ def create_app() -> FastAPI:
     @app.get("/health")
     async def health():
         return {"status": "ok", "version": s.version}
+
+    @app.get("/mastering")
+    async def mastering(request: Request):
+        return templates.TemplateResponse("mastering.html", {"request": request})
 
     return app
 
