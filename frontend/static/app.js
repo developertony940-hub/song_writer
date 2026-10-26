@@ -101,6 +101,8 @@ document.getElementById("new-project-btn").addEventListener("click", async () =>
 
 async function openProject(pid) {
   currentProject = await api(`/projects/${pid}`);
+  const masteringLink = document.getElementById("mastering-link");
+  if (masteringLink) masteringLink.href = `/mastering?project=${encodeURIComponent(pid)}`;
   if (typeof clearProfilePreview === "function") clearProfilePreview("");
   document.getElementById("empty-state").hidden = true;
   document.getElementById("project-view").hidden = false;

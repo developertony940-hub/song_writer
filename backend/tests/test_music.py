@@ -971,12 +971,13 @@ def test_preflight_flags_lyric_density(tmp_path, monkeypatch):
     pid = _project(service)
 
     dense = _settings().model_copy(update={
-        "lyrics": "[verse]\nLine one takes time,\nLine two takes time,\nLine three takes time,\n",
+        # The fit estimate now measures words/syllables/tempo, not line count.
+        "lyrics": "[verse]\n" + ("Remembering every beautiful extraordinary moment together\n" * 20),
     })
     saved = service.save_draft(pid, dense)
     assert "lyric_density_high" in {w["code"] for w in saved["preflight"]}
 
-    sparse = _settings().model_copy(update={"duration_s": 30.0})
+    sparse = _settings().model_copy(update={"duration_s": 120.0})
     saved = service.save_draft(pid, sparse)
     assert "lyric_density_low" in {w["code"] for w in saved["preflight"]}
 

@@ -408,6 +408,7 @@ class MusicService:
             arrangement=settings.arrangement,
             known_sections=cfg.known_sections,
             seconds_per_line=cfg.preflight_seconds_per_line,
+            bpm=settings.bpm,
         )
 
     def save_draft(
