@@ -113,6 +113,62 @@ button.primary {
 }
 button.primary:hover { filter: brightness(1.1); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
+.music-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.music-list li {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 13px;
+}
+.music-diff {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  font-family: monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  max-height: 320px;
+  overflow: auto;
+}
+.music-arr-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.music-arr-row input {
+  flex: 1;
+  min-width: 0;
+}
+.music-arr-section {
+  min-width: 130px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 13px;
+  margin: 0;
+}
+.arr-badge {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+.arr-warn {
+  color: #e0b040;
+  border-color: #e0b040;
+}
 .asset-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -286,3 +342,38 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .ab-row .ab-start, .ab-row .ab-end, .ab-row .ab-confidence, .ab-row .ab-ex-start, .ab-row .ab-ex-end { width: 84px; }
 .ab-row .ab-ex-reason { flex: 1; min-width: 160px; }
 .ab-inline { color: var(--muted); font-size: 12px; display: inline-flex; align-items: center; gap: 4px; }
+
+/* Music workflow */
+.download-link {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+}
+.download-link:hover { border-color: var(--accent); }
+
+/* Artist profiles */
+.profile-item {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-top: 8px;
+  background: var(--panel-2);
+}
+.profile-pre {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 240px;
+  font-size: 12px;
+}
+.profile-label {
+  color: var(--warn);
+  font-size: 12px;
+  margin-bottom: 4px;
+}

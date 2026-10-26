@@ -27,10 +27,10 @@ projects/{id}/
    ```powershell
    py -m venv .venv
    .\.venv\Scripts\pip install -r requirements.txt
-   .\.venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 8000
+   .\.venv\Scripts\uvicorn app.main:app --host 127.0.0.1 --port 7664
    ```
 
-   On Windows, `./run.ps1` performs the same backend setup and honors `LOCALAI_HOST` / `LOCALAI_PORT` (or its `-BindHost` / `-Port` parameters). `-BindHost` avoids PowerShell's reserved `$Host` automatic variable.
+   On Windows, `./run.ps1` performs the same backend setup and honors `LOCALAI_HOST` / `LOCALAI_PORT` (or its `-BindHost` / `-Port` parameters). `-BindHost` avoids PowerShell's reserved `$Host` automatic variable. `./run_music.ps1` launches the same backend in the explicitly authorized music-only mode (live generation with the experimental capacity override, not verified capacity; same default port 7664, `-Port` to override).
 
 3. Install TTS separately: `ops/requirements-tts-kokoro.txt` supports the local/offline Kokoro server (install a PyTorch wheel for the selected CUDA/CPU platform first); `ops/requirements-tts-edge.txt` is an optional networked fallback. For the committed native-FP8 ComfyUI graphs, see [`docs/INSTALL-ComfyUI.md`](docs/INSTALL-ComfyUI.md). The model downloader verifies basic safetensors structure; operators should pin and checksum models for fully reproducible installations.
 

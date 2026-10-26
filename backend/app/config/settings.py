@@ -14,7 +14,7 @@ from __future__ import annotations
 import copy
 import os
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -23,6 +23,7 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 _ENV_PREFIX = "LOCALAI_"
 _ALIASES = {
     "LOCALAI_PROJECTS_ROOT": ("app", "projects_root"),
+    "LOCALAI_PROFILES_ROOT": ("app", "profiles_root"),
     "LOCALAI_HOST": ("app", "host"),
     "LOCALAI_PORT": ("app", "port"),
     "LOCALAI_LMSTUDIO_URL": ("runtime", "lmstudio", "base_url"),
@@ -130,12 +131,50 @@ class AudiobookCfg:
 
 
 @dataclass(frozen=True)
+class MusicCfg:
+    """Bounded ACE-Step song workflow controls.
+
+    ``live_generation_authorized`` is a server-side hold. Isolated synthetic
+    tests may inject a fake ComfyUI adapter, but the real ComfyUI submission
+    path refuses to start while this is false.
+    """
+    live_generation_authorized: bool = False
+    capacity_verified: bool = False
+    capacity_override_authorized: bool = False
+    engine: str = "ace-step-1.5"
+    checkpoint: str = "ace_step_1.5_turbo_aio.safetensors"
+    checkpoint_sha256: str = "67b0f43aa5c51c840bd0228e6a935d8ff416ec87e5df2fc0637da17a561252bc"
+    workflow: str = "ace_step_1_5_aio"
+    max_submission_cap: int = 10
+    default_duration_s: float = 30.0
+    known_sections: list[str] = field(default_factory=lambda: [
+        "intro", "verse", "pre-chorus", "chorus", "post-chorus", "bridge",
+        "outro", "inst", "instrumental", "hook", "breakdown", "interlude",
+    ])
+    preflight_seconds_per_line: float = 6.0
+    max_variants: int = 30
+    max_critiques: int = 20
+    # Section-level repaint (offline integration). Submission stays disabled
+    # until a separate explicit authorization; no model is loaded here.
+    repaint_enabled: bool = False
+    repaint_service_url: str = "http://127.0.0.1:8021"
+    repaint_output_format: str = "wav32"
+    repaint_crossfade_ms: int = 10
+    repaint_min_free_vram_mib: int = 6144
+    # Isolated deterministic provider for offline browser walkthroughs. Real
+    # submission still requires repaint_enabled + an approved capacity gate.
+    repaint_fake_provider: bool = False
+    max_revisions: int = 30
+
+
+@dataclass(frozen=True)
 class Settings:
     name: str
     version: str
     host: str
     port: int
     projects_root: Path
+    profiles_root: Path
     lmstudio: LMStudioCfg
     comfyui: ComfyUICfg
     tts: TTSCfg
@@ -145,10 +184,15 @@ class Settings:
     provenance: ProvenanceCfg
     acceptance: AcceptanceCfg
     audiobook: AudiobookCfg
+    music: MusicCfg
 
     @property
     def projects_root_path(self) -> Path:
         return Path(self.projects_root)
+
+    @property
+    def profiles_root_path(self) -> Path:
+        return Path(self.profiles_root)
 
 
 def _parse_environment_value(value: str, existing: Any) -> Any:
@@ -236,6 +280,9 @@ def _build(data: dict[str, Any], config_path: Path, *, uses_external_config: boo
         projects_root=_portable_path(
             app["projects_root"], config_path, uses_external_config=uses_external_config,
         ),
+        profiles_root=_portable_path(
+            app["profiles_root"], config_path, uses_external_config=uses_external_config,
+        ),
         lmstudio=LMStudioCfg(**rt["lmstudio"]),
         comfyui=ComfyUICfg(**rt["comfyui"]),
         tts=TTSCfg(**rt["tts"]),
@@ -245,6 +292,7 @@ def _build(data: dict[str, Any], config_path: Path, *, uses_external_config: boo
         provenance=ProvenanceCfg(**data["provenance"]),
         acceptance=AcceptanceCfg(**data["acceptance"]),
         audiobook=AudiobookCfg(**data.get("audiobook", {})),
+        music=MusicCfg(**data.get("music", {})),
     )
 
 

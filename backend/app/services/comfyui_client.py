@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+from datetime import datetime, timezone
 import json
 import logging
 import time
@@ -32,6 +33,14 @@ WORKFLOWS_DIR = Path(__file__).resolve().parents[3] / "comfyui" / "workflows"
 
 class ComfyUIError(RuntimeError):
     pass
+
+
+class ComfyUICancelled(ComfyUIError):
+    """A bounded music submission was interrupted; terminal state is uncertain."""
+
+    def __init__(self, message: str, *, result: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.result = result
 
 
 class ComfyUIClient:
@@ -147,8 +156,9 @@ class ComfyUIClient:
             raise ComfyUIError(f"Image upload failed: {r.text}")
         return r.json().get("name", fname)
 
-    async def _queue_prompt(self, workflow: dict[str, Any]) -> str:
-        payload = {"prompt": workflow, "client_id": str(uuid.uuid4())}
+    async def _queue_prompt(self, workflow: dict[str, Any],
+                            client_id: str | None = None) -> str:
+        payload = {"prompt": workflow, "client_id": client_id or str(uuid.uuid4())}
         r = await self._client.post("/prompt", json=payload)
         if r.status_code >= 400:
             raise ComfyUIError(f"ComfyUI rejected workflow: {r.text}")
@@ -170,6 +180,145 @@ class ComfyUIClient:
         r = await self._client.get("/view", params=params)
         r.raise_for_status()
         return r.content
+
+    # --- music generation (ACE-Step) --------------------------------
+    async def submit_music(self, workflow_name: str, patches: dict[str, dict[str, Any]]) -> str:
+        workflow = self._patch_workflow(self._load_workflow(workflow_name), patches)
+        return await self._queue_prompt(workflow)
+
+    async def submit_music_graph(self, workflow: dict[str, Any],
+                                 client_id: str | None = None) -> str:
+        """Submit the already-resolved graph so the archived request is exact."""
+        return await self._queue_prompt(workflow, client_id=client_id)
+
+    async def system_stats(self) -> dict[str, Any] | None:
+        """Read ComfyUI's system statistics without loading or changing anything."""
+        try:
+            response = await self._client.get("/system_stats")
+            response.raise_for_status()
+            return response.json()
+        except Exception:
+            return None
+
+    async def submit_prompt_body(self, body: bytes, *,
+                                 client_id: str | None = None) -> dict[str, Any]:
+        """POST exact serialized request bytes and return the raw response record."""
+        response = await self._client.post(
+            "/prompt", content=body,
+            headers={"Content-Type": "application/json"})
+        observed_at = datetime.now(timezone.utc).isoformat()
+        response_json = None
+        try:
+            response_json = response.json()
+        except Exception:
+            response_json = None
+        prompt_id = None
+        if isinstance(response_json, dict):
+            prompt_id = response_json.get("prompt_id")
+        return {
+            "status_code": response.status_code,
+            "headers": dict(response.headers),
+            "body": response.content,
+            "json": response_json,
+            "prompt_id": prompt_id,
+            "observed_at": observed_at,
+            "client_id": client_id,
+            "request_url": "/prompt",
+        }
+
+    async def history(self, prompt_id: str) -> dict[str, Any] | None:
+        """Read one prompt's ComfyUI history once; returns None if unavailable."""
+        try:
+            response = await self._client.get(f"/history/{prompt_id}")
+            response.raise_for_status()
+            data = response.json()
+            if isinstance(data, dict):
+                return data.get(prompt_id)
+        except Exception:
+            return None
+        return None
+
+    async def wait_music(self, prompt_id: str, *, should_cancel=None,
+                         cancel_timeout_s: float = 10.0) -> dict[str, Any]:
+        deadline = time.time() + self.timeout
+        while time.time() < deadline:
+            if should_cancel is not None and should_cancel():
+                await self.cancel_prompt(prompt_id)
+                grace_deadline = time.time() + cancel_timeout_s
+                while time.time() < grace_deadline:
+                    r = await self._client.get(f"/history/{prompt_id}")
+                    r.raise_for_status()
+                    hist = r.json()
+                    if prompt_id in hist:
+                        raise ComfyUICancelled(
+                            "cancel requested; prompt already has terminal history",
+                            result=hist[prompt_id],
+                        )
+                    await asyncio.sleep(min(self.poll_interval, 1))
+                raise ComfyUICancelled("cancel requested; terminal history not confirmed")
+            r = await self._client.get(f"/history/{prompt_id}")
+            r.raise_for_status()
+            hist = r.json()
+            if prompt_id in hist:
+                return hist[prompt_id]
+            await asyncio.sleep(self.poll_interval)
+        raise ComfyUIError(f"Timed out waiting for ComfyUI prompt {prompt_id}")
+
+    async def fetch_music(self, result: dict[str, Any], *, prompt_id: str = "") -> dict[str, Any]:
+        outputs = result.get("outputs", {})
+        for node_out in outputs.values():
+            for key in ("audio", "mp3", "wav", "flac"):
+                items = node_out.get(key)
+                if not isinstance(items, list):
+                    continue
+                for item in items:
+                    if not isinstance(item, dict) or not item.get("filename"):
+                        continue
+                    data = await self._fetch_output(
+                        item["filename"], item.get("subfolder", ""), item.get("type", "output")
+                    )
+                    return {
+                        "filename": item["filename"],
+                        "subfolder": item.get("subfolder", ""),
+                        "bytes": data,
+                        "prompt_id": prompt_id,
+                    }
+        raise ComfyUIError("No audio output found in ComfyUI result")
+
+    async def cancel_prompt(self, prompt_id: str) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        try:
+            r = await self._client.get("/queue")
+            r.raise_for_status()
+            queue = r.json()
+        except Exception as exc:
+            result["queue_inspect_error"] = str(exc)
+            queue = {}
+        running = [
+            item[1] for item in queue.get("queue_running", [])
+            if isinstance(item, list) and len(item) > 1
+        ]
+        pending = [
+            item[1] for item in queue.get("queue_pending", [])
+            if isinstance(item, list) and len(item) > 1
+        ]
+        result["observed_running"] = prompt_id in running
+        result["observed_pending"] = prompt_id in pending
+        if prompt_id in running:
+            try:
+                r = await self._client.post("/interrupt")
+                result["interrupt_status"] = r.status_code
+                r.raise_for_status()
+            except Exception as exc:
+                result["interrupt_error"] = str(exc)
+        if prompt_id in pending:
+            try:
+                r = await self._client.post("/queue", json={"delete": [prompt_id]})
+                result["queue_status"] = r.status_code
+                r.raise_for_status()
+            except Exception as exc:
+                result["queue_error"] = str(exc)
+        return result
 
     async def generate_image(
         self,

@@ -1,0 +1,848 @@
+{
+  "schema": "song_writer.audio_version_proposal.v1",
+  "proposal_id": "ac668b7c7faa-extended-bridge-audio-v2",
+  "created_at": "2026-10-25T14:55:38.376444+00:00",
+  "status": "proposed_not_applied",
+  "live_authorization": false,
+  "project_id": "ac668b7c7faa",
+  "audio_version": 2,
+  "source_audio_version": {
+    "version_label": "original-audio-v1",
+    "asset_id": "0f26194c08",
+    "attempt_id": "519bd4ccf1",
+    "source_draft_revision": 3,
+    "path": "projects/ac668b7c7faa/music/ace-step-519bd4ccf1.mp3",
+    "sha256": "d26450aae581bfc2a585dcd9811e2b9af8dbee70ecf19027b56a6ec4920bdb63",
+    "expected_sha256": "d26450aae581bfc2a585dcd9811e2b9af8dbee70ecf19027b56a6ec4920bdb63",
+    "verified": true,
+    "duration_s": 300.0,
+    "sample_rate": 48000,
+    "channels": 2,
+    "protected": "original audio is not rewritten by this proposal"
+  },
+  "draft_revisions_reference_only": {
+    "note": "Draft revisions v1-v4 are lyric/settings revisions; they are not audio versions. Audio version 2 is a separate proposal and is not draft revision 2.",
+    "current_draft_revision": 4,
+    "revisions": [
+      {
+        "version": 1,
+        "take_count": 0
+      },
+      {
+        "version": 2,
+        "take_count": 0
+      },
+      {
+        "version": 3,
+        "take_count": 1,
+        "source_take": true
+      },
+      {
+        "version": 4,
+        "take_count": 0,
+        "name": "add missing Chorus 2"
+      }
+    ]
+  },
+  "marker_history": {
+    "authority": "user-confirmed source map with Outro boundary at 285s",
+    "original_records": [
+      {
+        "section": "Intro",
+        "occurrence": 1,
+        "start_s": 0.0,
+        "end_s": 7.5,
+        "confirmed_at": "2026-10-25T03:50:37.774047Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Verse 1",
+        "occurrence": 1,
+        "start_s": 7.5,
+        "end_s": 52.6,
+        "confirmed_at": "2026-10-25T03:54:21.981496Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Chorus",
+        "occurrence": 1,
+        "start_s": 52.6,
+        "end_s": 91.9,
+        "confirmed_at": "2026-10-25T04:35:28.357966Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Verse 2",
+        "occurrence": 1,
+        "start_s": 91.9,
+        "end_s": 136.9,
+        "confirmed_at": "2026-10-25T04:47:03.124401Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Chorus 2",
+        "occurrence": 1,
+        "start_s": 136.9,
+        "end_s": 177.0,
+        "confirmed_at": "2026-10-25T05:07:14.268159Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Instrumental",
+        "occurrence": 1,
+        "start_s": 177.0,
+        "end_s": 185.0,
+        "confirmed_at": "2026-10-25T13:35:37.079106Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Bridge",
+        "occurrence": 1,
+        "start_s": 185.0,
+        "end_s": 224.0,
+        "confirmed_at": "2026-10-25T13:39:19.683763Z",
+        "status": "confirmed"
+      },
+      {
+        "section": "Final Chorus",
+        "occurrence": 1,
+        "start_s": 249.0,
+        "end_s": 251.0,
+        "confirmed_at": "2026-10-25T13:42:16.988883Z",
+        "status": "superseded",
+        "superseded_by": "correction-1",
+        "superseded_reason": "Erroneous short marker; the Final Chorus begins at the Bridge end and includes additional paragraphs through 285s."
+      },
+      {
+        "section": "Outro",
+        "occurrence": 1,
+        "start_s": 251.0,
+        "end_s": 300.0,
+        "confirmed_at": "2026-10-25T13:44:23.770268Z",
+        "status": "superseded",
+        "superseded_by": "correction-1",
+        "superseded_reason": "Start was wrong; corrected Outro begins at 285s with lingering steel and fade."
+      }
+    ],
+    "corrected_source_map": [
+      {
+        "section": "Intro",
+        "occurrence": 1,
+        "start_s": 0.0,
+        "end_s": 7.5,
+        "status": "confirmed"
+      },
+      {
+        "section": "Verse 1",
+        "occurrence": 1,
+        "start_s": 7.5,
+        "end_s": 52.6,
+        "status": "confirmed"
+      },
+      {
+        "section": "Chorus",
+        "occurrence": 1,
+        "start_s": 52.6,
+        "end_s": 91.9,
+        "status": "confirmed"
+      },
+      {
+        "section": "Verse 2",
+        "occurrence": 1,
+        "start_s": 91.9,
+        "end_s": 136.9,
+        "status": "confirmed"
+      },
+      {
+        "section": "Chorus 2",
+        "occurrence": 1,
+        "start_s": 136.9,
+        "end_s": 177.0,
+        "status": "confirmed"
+      },
+      {
+        "section": "Instrumental",
+        "occurrence": 1,
+        "start_s": 177.0,
+        "end_s": 185.0,
+        "status": "confirmed"
+      },
+      {
+        "section": "Bridge",
+        "occurrence": 1,
+        "start_s": 185.0,
+        "end_s": 224.0,
+        "status": "confirmed"
+      },
+      {
+        "section": "Final Chorus",
+        "occurrence": 1,
+        "start_s": 224.0,
+        "end_s": 285.0,
+        "status": "corrected",
+        "final_lyric_end_s": 284.0,
+        "vocal_to_instrumental_transition_s": [
+          284.0,
+          285.0
+        ],
+        "boundary_basis": "285s is the user's chosen section boundary, not an exact detected vocal cutoff."
+      },
+      {
+        "section": "Outro",
+        "occurrence": 1,
+        "start_s": 285.0,
+        "end_s": 300.0,
+        "status": "corrected"
+      }
+    ],
+    "correction": {
+      "correction_id": "correction-2",
+      "corrected_at": "2026-10-25T15:02:58.651819+00:00",
+      "status": "active",
+      "authority": "user-confirmed Outro boundary at 285s (4:45)",
+      "supersedes": [
+        {
+          "section": "Final Chorus",
+          "occurrence": 1,
+          "old_start_s": 249.0,
+          "old_end_s": 251.0,
+          "new_start_s": 224.0,
+          "new_end_s": 285.0
+        },
+        {
+          "section": "Outro",
+          "occurrence": 1,
+          "old_start_s": 251.0,
+          "old_end_s": 300.0,
+          "new_start_s": 285.0,
+          "new_end_s": 300.0
+        },
+        {
+          "correction_id": "correction-1",
+          "note": "Earlier 224-284/284-300 planning correction retained as history."
+        }
+      ],
+      "superseded_gap": {
+        "previous": "Bridge #1",
+        "next": "Final Chorus #1",
+        "seconds": 25.0,
+        "status": "superseded",
+        "reason": "Final Chorus begins at Bridge end 224.0s and runs through 285.0s."
+      },
+      "final_lyric_end_s": 284.0,
+      "vocal_to_instrumental_transition_s": [
+        284.0,
+        285.0
+      ],
+      "chosen_section_boundary_s": 285.0,
+      "boundary_basis": "285s is the user's chosen section boundary, not an exact detected vocal cutoff.",
+      "history_retained": true
+    },
+    "arrangement_plan_suggestions_not_used": {
+      "used_as_audio_boundaries": false,
+      "values": {
+        "Bridge": "2:00-2:24 (120-144s)",
+        "Final Chorus": "2:24-2:54 (144-174s)",
+        "Outro": "2:54-3:00 (174-180s)"
+      },
+      "reason": "Arrangement plan timings do not match the 300s source audio and are not audio boundaries."
+    },
+    "superseded_in_proposal": true,
+    "applied_by_this_proposal": false,
+    "correction_present_in_live_project": true,
+    "live_project_observation": {
+      "observed_at": "2026-10-25T15:02:58.651819+00:00",
+      "final_chorus_s": [
+        224.0,
+        285.0
+      ],
+      "outro_s": [
+        285.0,
+        300.0
+      ],
+      "confirmed_at": "2026-10-25T14:57:56Z",
+      "gap_present": false,
+      "matches_user_confirmed_map": true,
+      "delta_s": 0.0,
+      "rewrite_performed": false,
+      "note": "Current source-bound live markers already match Final Chorus 224-285 and Outro 285-300; no live rewrite is performed.",
+      "verified_by": "read-only GET /api/music/ac668b7c7faa/section-boundaries?asset_id=0f26194c08",
+      "source_bound_live_markers": true,
+      "outro_confirmed_at": "2026-10-25T14:57:49Z"
+    },
+    "corrections": [
+      {
+        "correction_id": "correction-1",
+        "corrected_at": "2026-10-25T14:55:38.376444+00:00",
+        "status": "superseded_by_correction-2",
+        "authority": "earlier corrected planning map",
+        "supersedes": [
+          {
+            "section": "Final Chorus",
+            "occurrence": 1,
+            "old_start_s": 249.0,
+            "old_end_s": 251.0,
+            "new_start_s": 224.0,
+            "new_end_s": 284.0
+          },
+          {
+            "section": "Outro",
+            "occurrence": 1,
+            "old_start_s": 251.0,
+            "old_end_s": 300.0,
+            "new_start_s": 284.0,
+            "new_end_s": 300.0
+          }
+        ],
+        "superseded_gap": {
+          "previous": "Bridge #1",
+          "next": "Final Chorus #1",
+          "seconds": 25.0,
+          "status": "superseded",
+          "reason": "Final Chorus begins at Bridge end 224.0s and runs through 284.0s."
+        },
+        "final_lyric_end_s": 284.0,
+        "result": {
+          "Final Chorus": [
+            224.0,
+            284.0
+          ],
+          "Outro": [
+            284.0,
+            300.0
+          ]
+        },
+        "superseded_reason": "User later confirmed the Outro boundary at 285s."
+      },
+      {
+        "correction_id": "correction-2",
+        "corrected_at": "2026-10-25T15:02:58.651819+00:00",
+        "status": "active",
+        "authority": "user-confirmed Outro boundary at 285s (4:45)",
+        "supersedes": [
+          {
+            "section": "Final Chorus",
+            "occurrence": 1,
+            "old_start_s": 249.0,
+            "old_end_s": 251.0,
+            "new_start_s": 224.0,
+            "new_end_s": 285.0
+          },
+          {
+            "section": "Outro",
+            "occurrence": 1,
+            "old_start_s": 251.0,
+            "old_end_s": 300.0,
+            "new_start_s": 285.0,
+            "new_end_s": 300.0
+          },
+          {
+            "correction_id": "correction-1",
+            "note": "Earlier 224-284/284-300 planning correction retained as history."
+          }
+        ],
+        "superseded_gap": {
+          "previous": "Bridge #1",
+          "next": "Final Chorus #1",
+          "seconds": 25.0,
+          "status": "superseded",
+          "reason": "Final Chorus begins at Bridge end 224.0s and runs through 285.0s."
+        },
+        "final_lyric_end_s": 284.0,
+        "vocal_to_instrumental_transition_s": [
+          284.0,
+          285.0
+        ],
+        "chosen_section_boundary_s": 285.0,
+        "boundary_basis": "285s is the user's chosen section boundary, not an exact detected vocal cutoff.",
+        "history_retained": true
+      }
+    ],
+    "active_correction_id": "correction-2",
+    "vocal_to_instrumental_transition_s": [
+      284.0,
+      285.0
+    ],
+    "chosen_section_boundary_s": 285.0,
+    "boundary_basis": "285s is the user's chosen section boundary, not an exact detected vocal cutoff."
+  },
+  "audio_timelines": {
+    "original": {
+      "duration_s": 300.0,
+      "markers": [
+        {
+          "section": "Intro",
+          "occurrence": 1,
+          "start_s": 0.0,
+          "end_s": 7.5,
+          "status": "confirmed"
+        },
+        {
+          "section": "Verse 1",
+          "occurrence": 1,
+          "start_s": 7.5,
+          "end_s": 52.6,
+          "status": "confirmed"
+        },
+        {
+          "section": "Chorus",
+          "occurrence": 1,
+          "start_s": 52.6,
+          "end_s": 91.9,
+          "status": "confirmed"
+        },
+        {
+          "section": "Verse 2",
+          "occurrence": 1,
+          "start_s": 91.9,
+          "end_s": 136.9,
+          "status": "confirmed"
+        },
+        {
+          "section": "Chorus 2",
+          "occurrence": 1,
+          "start_s": 136.9,
+          "end_s": 177.0,
+          "status": "confirmed"
+        },
+        {
+          "section": "Instrumental",
+          "occurrence": 1,
+          "start_s": 177.0,
+          "end_s": 185.0,
+          "status": "confirmed"
+        },
+        {
+          "section": "Bridge",
+          "occurrence": 1,
+          "start_s": 185.0,
+          "end_s": 224.0,
+          "status": "confirmed"
+        },
+        {
+          "section": "Final Chorus",
+          "occurrence": 1,
+          "start_s": 224.0,
+          "end_s": 285.0,
+          "status": "corrected",
+          "final_lyric_end_s": 284.0
+        },
+        {
+          "section": "Outro",
+          "occurrence": 1,
+          "start_s": 285.0,
+          "end_s": 300.0,
+          "status": "corrected"
+        }
+      ],
+      "recorded_markers": [
+        {
+          "section": "Intro",
+          "occurrence": 1,
+          "start_s": 0.0,
+          "end_s": 7.5,
+          "confirmed_at": "2026-10-25T03:50:37.774047Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Verse 1",
+          "occurrence": 1,
+          "start_s": 7.5,
+          "end_s": 52.6,
+          "confirmed_at": "2026-10-25T03:54:21.981496Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Chorus",
+          "occurrence": 1,
+          "start_s": 52.6,
+          "end_s": 91.9,
+          "confirmed_at": "2026-10-25T04:35:28.357966Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Verse 2",
+          "occurrence": 1,
+          "start_s": 91.9,
+          "end_s": 136.9,
+          "confirmed_at": "2026-10-25T04:47:03.124401Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Chorus 2",
+          "occurrence": 1,
+          "start_s": 136.9,
+          "end_s": 177.0,
+          "confirmed_at": "2026-10-25T05:07:14.268159Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Instrumental",
+          "occurrence": 1,
+          "start_s": 177.0,
+          "end_s": 185.0,
+          "confirmed_at": "2026-10-25T13:35:37.079106Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Bridge",
+          "occurrence": 1,
+          "start_s": 185.0,
+          "end_s": 224.0,
+          "confirmed_at": "2026-10-25T13:39:19.683763Z",
+          "status": "confirmed"
+        },
+        {
+          "section": "Final Chorus",
+          "occurrence": 1,
+          "start_s": 249.0,
+          "end_s": 251.0,
+          "confirmed_at": "2026-10-25T13:42:16.988883Z",
+          "status": "superseded",
+          "superseded_by": "correction-1",
+          "superseded_reason": "Erroneous short marker; the Final Chorus begins at the Bridge end and includes additional paragraphs through 284s."
+        },
+        {
+          "section": "Outro",
+          "occurrence": 1,
+          "start_s": 251.0,
+          "end_s": 300.0,
+          "confirmed_at": "2026-10-25T13:44:23.770268Z",
+          "status": "superseded",
+          "superseded_by": "correction-1",
+          "superseded_reason": "Start was wrong; corrected Outro begins at 284s with lingering steel and fade."
+        }
+      ]
+    },
+    "planned_v2": {
+      "duration_s": 309.0,
+      "markers": [
+        {
+          "section": "Intro",
+          "occurrence": 1,
+          "start_s": 0.0,
+          "end_s": 7.5
+        },
+        {
+          "section": "Verse 1",
+          "occurrence": 1,
+          "start_s": 7.5,
+          "end_s": 52.6
+        },
+        {
+          "section": "Chorus",
+          "occurrence": 1,
+          "start_s": 52.6,
+          "end_s": 91.9
+        },
+        {
+          "section": "Verse 2",
+          "occurrence": 1,
+          "start_s": 91.9,
+          "end_s": 136.9
+        },
+        {
+          "section": "Chorus 2",
+          "occurrence": 1,
+          "start_s": 136.9,
+          "end_s": 177.0
+        },
+        {
+          "section": "Instrumental",
+          "occurrence": 1,
+          "start_s": 177.0,
+          "end_s": 185.0
+        },
+        {
+          "section": "Bridge",
+          "occurrence": 1,
+          "start_s": 185.0,
+          "end_s": 233.0,
+          "occurrence_duration_s": 48.0
+        },
+        {
+          "section": "Final Chorus",
+          "occurrence": 1,
+          "start_s": 233.0,
+          "end_s": 294.0,
+          "occurrence_duration_s": 61.0
+        },
+        {
+          "section": "Outro",
+          "occurrence": 1,
+          "start_s": 294.0,
+          "end_s": 309.0,
+          "occurrence_duration_s": 15.0
+        }
+      ],
+      "status": "proposed"
+    },
+    "actual": {
+      "status": "not_recorded",
+      "note": "No applied audio version 2 exists."
+    }
+  },
+  "planned_v2": {
+    "bridge": {
+      "source_start_s": 185.0,
+      "source_end_s": 224.0,
+      "candidate_start_s": 185.0,
+      "candidate_end_s": 233.0,
+      "source_duration_s": 39.0,
+      "candidate_duration_s": 48.0
+    },
+    "added_duration_s": 9.0,
+    "added_time_allocation": "complete natural vocal delivery of all eight Bridge lines; no mandatory instrumental break",
+    "instrumental_break_required": false,
+    "lyrics": [
+      "Maybe those old friends are still out there somewhere,",
+      "Maybe the same old band still plays the songs we shared.",
+      "And maybe we've got a few more miles on these old boots,",
+      "But, baby, there's still a two-step left in me and you.",
+      "We don't have to be young again,",
+      "We don't have to turn back time,",
+      "Just let me hold you like I did back then,",
+      "And let that old fiddle play one more time."
+    ],
+    "lyric_line_count": 8,
+    "final_lyric_source_end_s": 284.0,
+    "final_lyric_candidate_end_s": 293.0,
+    "line_pacing_guidance": "approximately two bars per line at 80 BPM (6.0s/line, four 12s couplets); guidance only, not edit boundaries",
+    "technical_insertion": {
+      "at_source_s": 224.0,
+      "material": "9.0s digital silence scaffold",
+      "musical_section": false,
+      "approved_musical_boundary": false,
+      "inside_repaint_mask": true,
+      "note": "Length scaffold only; removed from final generated bridge. 206s was an unconfirmed suggestion and is not used."
+    },
+    "everything_before_185_unchanged": true,
+    "vocal_to_instrumental_transition_source_s": [
+      284.0,
+      285.0
+    ],
+    "vocal_to_instrumental_transition_candidate_s": [
+      293.0,
+      294.0
+    ],
+    "final_chorus_duration_s": 61.0,
+    "outro_duration_s": 15.0,
+    "chosen_outro_section_boundary_source_s": 285.0
+  },
+  "source_to_candidate_mapping": [
+    {
+      "source_start_s": 0.0,
+      "source_end_s": 185.0,
+      "candidate_start_s": 0.0,
+      "candidate_end_s": 185.0,
+      "shift_s": 0.0,
+      "kind": "preserved",
+      "section": "pre-Bridge"
+    },
+    {
+      "source_start_s": 185.0,
+      "source_end_s": 224.0,
+      "candidate_start_s": 185.0,
+      "candidate_end_s": 233.0,
+      "shift_s": 9.0,
+      "kind": "replaced_expanded",
+      "section": "Bridge"
+    },
+    {
+      "source_start_s": 224.0,
+      "source_end_s": 285.0,
+      "candidate_start_s": 233.0,
+      "candidate_end_s": 294.0,
+      "shift_s": 9.0,
+      "kind": "preserved",
+      "section": "Final Chorus"
+    },
+    {
+      "source_start_s": 285.0,
+      "source_end_s": 300.0,
+      "candidate_start_s": 294.0,
+      "candidate_end_s": 309.0,
+      "shift_s": 9.0,
+      "kind": "preserved",
+      "section": "Outro"
+    }
+  ],
+  "splice_contract": {
+    "working_source": {
+      "duration_s": 309.0,
+      "sha256": "a8bd2e71d7147a2dee6945b04b6c600135d4a17379d14617de7917f55c651754",
+      "insertion_s": [
+        224.0,
+        233.0
+      ]
+    },
+    "conditioning_source": {
+      "path": "conditioning_clip_182_to_236.wav",
+      "duration_s": 54.0,
+      "sha256": "3ffbb2703aaf5423c98966bcfde7792a2c492b8da46da3af9430a32a24aca3ce",
+      "start_s": 182.0,
+      "end_s": 236.0
+    },
+    "provider_mask": {
+      "relative_s": [
+        3.0,
+        51.0
+      ],
+      "full_source_s": [
+        185.0,
+        233.0
+      ],
+      "chunk_mask_mode": "explicit",
+      "provider_output_duration_s": 54.0
+    },
+    "replacement": {
+      "pure_start_s": 185.05,
+      "pure_end_s": 232.95,
+      "pure_duration_s": 47.9,
+      "mask_duration_s": 48.0
+    },
+    "transitions": [
+      {
+        "name": "start",
+        "start_s": 185.0,
+        "end_s": 185.05,
+        "method": "linear crossfade",
+        "from": "original PCM",
+        "to": "provider replacement"
+      },
+      {
+        "name": "end",
+        "start_s": 232.95,
+        "end_s": 233.0,
+        "method": "linear crossfade",
+        "from": "provider replacement",
+        "to": "original PCM shifted"
+      }
+    ],
+    "outside_replacement_and_transitions": "original decoded PCM only",
+    "provider_context_handles_used_wholesale": false,
+    "review_window": {
+      "start_s": 182.0,
+      "end_s": 236.0,
+      "duration_s": 54.0,
+      "handles": "original PCM"
+    },
+    "assembled_master": {
+      "duration_s": 309.0,
+      "start_s": 0.0,
+      "end_s": 309.0
+    },
+    "assembly": "original 0-185s + declared transitions/provider replacement 185-233s + original 224-300s shifted +9s"
+  },
+  "native_model_identity": {
+    "native": {
+      "path": "S:/AI/ace-step-models/acestep-v15-turbo/model.safetensors",
+      "sha256": "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7",
+      "bytes": 4787825604,
+      "architecture": "AceStepConditionGenerationModel",
+      "model_version": "turbo",
+      "dtype": "bfloat16",
+      "layers": 24,
+      "lm_loaded_for_repaint": false,
+      "upstream_commit": "ca1e85fe9430179831e6bc6be790c332190a3866"
+    },
+    "original_take": {
+      "path": "S:/ComfyUI/ComfyUI/models/checkpoints/ace_step_1.5_turbo_aio.safetensors",
+      "sha256": "67b0f43aa5c51c840bd0228e6a935d8ff416ec87e5df2fc0637da17a561252bc",
+      "bytes": 10025478736,
+      "workflow": "ace_step_1_5_aio"
+    },
+    "parity": "Different artifacts; weight parity between the 10GB ComfyUI AIO source-take checkpoint and the 4.79GB native turbo model is unverified."
+  },
+  "conditioning_inputs": {
+    "provider": "ACE-Step 1.5 native repaint",
+    "task_type": "repaint",
+    "clip_sha256": "3ffbb2703aaf5423c98966bcfde7792a2c492b8da46da3af9430a32a24aca3ce",
+    "mask_relative_s": [
+      3.0,
+      51.0
+    ],
+    "mask_full_s": [
+      185.0,
+      233.0
+    ],
+    "chunk_mask_mode": "explicit",
+    "repaint_mode": "conservative",
+    "audio_cover_strength": 1.0,
+    "audio_format": "wav32",
+    "lyrics": [
+      "Maybe those old friends are still out there somewhere,",
+      "Maybe the same old band still plays the songs we shared.",
+      "And maybe we've got a few more miles on these old boots,",
+      "But, baby, there's still a two-step left in me and you.",
+      "We don't have to be young again,",
+      "We don't have to turn back time,",
+      "Just let me hold you like I did back then,",
+      "And let that old fiddle play one more time."
+    ],
+    "performance_guidance": "Restrained, intimate male country lead; deliver all eight Bridge lines continuously across the 48-second replacement. No instrumental break or new section. Use natural breaths and line endings, approximately two bars per line at 80 BPM as guidance only. Preserve the two-step pocket and existing acoustic instrumentation; no new hook, tempo change, key change, or ad-lib. Resolve naturally into the Final Chorus.",
+    "seed": 20261024,
+    "bpm": 80,
+    "key_scale": "C major",
+    "time_signature": "4",
+    "language": "en",
+    "duration_locked_by_provider": true,
+    "comfyui_repaint_supported": false
+  },
+  "hashes": {
+    "source_sha256": "d26450aae581bfc2a585dcd9811e2b9af8dbee70ecf19027b56a6ec4920bdb63",
+    "working_source_sha256": "a8bd2e71d7147a2dee6945b04b6c600135d4a17379d14617de7917f55c651754",
+    "conditioning_clip_sha256": "3ffbb2703aaf5423c98966bcfde7792a2c492b8da46da3af9430a32a24aca3ce",
+    "simulated_provider_54s_sha256": "58c42924375b9ff40efe2592cf619e690f01e38d89fa95b8a94071730335462d",
+    "simulated_replacement_48s_sha256": "ca8808f7336299d565008a394381f2347b3d465ad5b97d76fafd37453992a793",
+    "simulated_master_309s_sha256": "a7c7801e6b09fd2086ea4a6e937365a9d75637e1b30cadd5311209b3afbbaa2d",
+    "simulated_review_54s_sha256": "0830bdd5e30f66c303fc646d96fcf9511857a948f81ae99a065b8bb28ad70f59",
+    "actual_candidate_sha256": null,
+    "note": "Simulated hashes prove the splice contract only; they are not generated audio."
+  },
+  "verification": {
+    "report_path": "docs/extended-bridge-audio-v2-verification.json",
+    "status": "verified_offline",
+    "verified_at": "2026-10-25T17:04:09.916125+00:00",
+    "failed_checks": [],
+    "synthetic_tests_do_not_prove_audio_quality": true
+  },
+  "capacity": {
+    "provider_input_duration_s": 54.0,
+    "within_90s_practical_segment": true,
+    "within_600s_code_limit": true,
+    "target_gpu_index": 1,
+    "admission_floor_mib": 20480,
+    "current_gpu_free_mib": 12403,
+    "capacity_gate": "closed",
+    "service_running": false,
+    "live_authorized": false,
+    "measured_at": "2026-10-25T09:30:00Z"
+  },
+  "remaining_uncertainties": [
+    "48.0s and approximate two-bars-per-line pacing are proposals; not auditioned.",
+    "The 9.0s silence is only a source-length scaffold inside the mask, not a musical instruction.",
+    "Native model parity with the original ComfyUI AIO checkpoint is unverified.",
+    "Singer, melody, timbre, and instrumentation continuity are unverified.",
+    "Actual provider transition behavior may differ from the simulated 50ms linear crossfades.",
+    "Native repaint at 54s with mask 3-51s has not been run.",
+    "The corrected Final Chorus and Outro markers are user listening-confirmed but have not been independently audio-analyzed here.",
+    "The planned v2 timeline requires shifting all post-Bridge markers by +9.0s; no live marker change was made by this task.",
+    "The 285s Outro boundary is a user-chosen section boundary; the vocal-to-instrumental transition is approximately 284-285s, not an exact detected cutoff.",
+    "Current live markers already match 224-285/285-300; no live marker rewrite was performed."
+  ],
+  "authorization": {
+    "live_run_authorized": false,
+    "reason": "No live authorization; capacity gate closed; no service start or model load permitted.",
+    "proposed_limits": {
+      "attempts": 1,
+      "retries": 0,
+      "apply_to_song": false,
+      "marker_change": false,
+      "approval_change": false,
+      "cap_change": false
+    }
+  },
+  "draft_revisions_are_not_audio_versions": true,
+  "record_hashes_path": "docs/extended-bridge-audio-v2-record-hashes.json"
+}

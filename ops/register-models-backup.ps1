@@ -5,7 +5,7 @@
   after you finish downloading models in Step 4 of INSTALL-ComfyUI.md.
 
   Creates one Windows Scheduled Task:
-    LocalAIContent-Backup-Models  - 1st of every month at 04:00
+    song_writer-Backup-Models  - 1st of every month at 04:00
 
   Runs whether the user is logged in or not. Uses the current user.
 
@@ -16,7 +16,7 @@
 
 .NOTES
   To unregister later:
-    Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Models' -Confirm:$false
+    Unregister-ScheduledTask -TaskName 'song_writer-Backup-Models' -Confirm:$false
 #>
 
 [CmdletBinding()]
@@ -68,12 +68,12 @@ $settings = New-ScheduledTaskSettingsSet `
     -RestartInterval (New-TimeSpan -Minutes 15)
 
 Register-ScheduledTask `
-    -TaskName 'LocalAIContent-Backup-Models' `
+    -TaskName 'song_writer-Backup-Models' `
     -Description 'Monthly refresh mirror of configured ComfyUI models source' `
     -Action $action -Trigger $trigger -Settings $settings `
     -User $currentUser -RunLevel Highest -Force | Out-Null
 
-Write-Host "Task registered: LocalAIContent-Backup-Models" -ForegroundColor Green
+Write-Host "Task registered: song_writer-Backup-Models" -ForegroundColor Green
 
 if ($RunNow) {
     Write-Host "Running seed backup now..." -ForegroundColor Cyan
@@ -88,7 +88,7 @@ else {
 
 Write-Host ""
 Write-Host "Verify:"
-Write-Host "  Get-ScheduledTask -TaskName 'LocalAIContent-Backup-Models' | Select TaskName,State"
+Write-Host "  Get-ScheduledTask -TaskName 'song_writer-Backup-Models' | Select TaskName,State"
 Write-Host ""
 Write-Host "Unregister later:"
-Write-Host "  Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Models' -Confirm:`$false"
+Write-Host "  Unregister-ScheduledTask -TaskName 'song_writer-Backup-Models' -Confirm:`$false"

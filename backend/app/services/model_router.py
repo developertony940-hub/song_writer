@@ -38,6 +38,18 @@ class CapacityHeld(RuntimeError):
         super().__init__(f"GPU {int(slot)} capacity is held pending documented recovery: {detail}{suffix}")
 
 
+class ModelSwitchRequired(RuntimeError):
+    """A requested model would require an unapproved ComfyUI model switch."""
+
+    def __init__(self, slot: "Slot", prior_model: str, requested_model: str) -> None:
+        self.slot = slot
+        self.prior_model = prior_model
+        self.requested_model = requested_model
+        super().__init__(
+            f"GPU {int(slot)} currently holds {prior_model}; requesting {requested_model} "
+            "would require an unload/model switch")
+
+
 class HoldPersistenceError(RuntimeError):
     """A capacity hold could not be persisted to (or cleared from) disk.
 
@@ -59,6 +71,7 @@ PROFILES = {
     "flux_dev_fp8": ModelProfile(18000, Slot.GPU1, "image"),
     "wan21_i2v_14b_fp8": ModelProfile(21000, Slot.GPU1, "video"),
     "wan21_t2v_14b_fp8": ModelProfile(21000, Slot.GPU1, "video"),
+    "ace-step-1.5": ModelProfile(16000, Slot.GPU1, "music"),
     "kokoro-82m": ModelProfile(2000, Slot.GPU0, "tts"),
 }
 
@@ -177,7 +190,7 @@ class ModelRouter:
         if hold is not None:
             raise CapacityHeld(profile.slot, hold)
 
-    async def acquire(self, model: str, job_id: str) -> ModelProfile:
+    async def acquire(self, model: str, job_id: str, *, allow_unload: bool = True) -> ModelProfile:
         profile = self._profile(model)
         lease = self._leases[profile.slot]
         await lease.acquire()  # intentionally held for the whole model invocation
@@ -189,6 +202,8 @@ class ModelRouter:
                     raise RuntimeError(f"GPU {int(profile.slot)} lease state is inconsistent")
                 prior = state["current_model"]
             if prior not in (None, model) and profile.slot in self._unloaders:
+                if not allow_unload:
+                    raise ModelSwitchRequired(profile.slot, str(prior), model)
                 outcome = await self._unloaders[profile.slot]()
                 verified = bool(outcome is True or (isinstance(outcome, dict) and outcome.get("verified")))
                 async with self._state_lock:

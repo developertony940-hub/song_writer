@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-  Portable backup for LocalAIContent project assets.
+  Portable backup for song_writer project assets.
   Weekly full + daily differential, implemented via robocopy /MIR for the
   full pass and robocopy with /XO (older files skipped) for differentials.
 
@@ -26,8 +26,8 @@
           (keeps a separate rolling copy; pairs with the weekly full)
 
 .EXAMPLE
-  .\backup-projects.ps1 -Mode full -Source "C:\LocalAIContent\projects" -BackupRoot "E:\Backups\LocalAIContent"
-  .\backup-projects.ps1 -Mode diff -Source "C:\LocalAIContent\projects" -BackupRoot "E:\Backups\LocalAIContent"
+  .\backup-projects.ps1 -Mode full -Source "D:\AIOS\development\song_writer\projects" -BackupRoot "E:\Backups\song_writer"
+  .\backup-projects.ps1 -Mode diff -Source "D:\AIOS\development\song_writer\projects" -BackupRoot "E:\Backups\song_writer"
   # Or set LOCALAI_PROJECTS_ROOT and LOCALAI_PROJECTS_BACKUP_ROOT.
 #>
 

@@ -23,6 +23,7 @@ from app.models.audiobook import (
     AnnotationSet,
     Approval,
     AudiobookState,
+    Chunk,
     ChunkStatus,
     ImportChapterRequest,
     Master,
@@ -205,7 +206,9 @@ class AudiobookService:
 
     async def render(self, pid: str, *, synth: Synth | None = None,
                      should_cancel: Callable[[], bool] | None = None,
-                     confirm_stopped: bool = True, force: bool = False) -> dict:
+                     confirm_stopped: bool = True, force: bool = False,
+                     on_chunk_attempt: Callable[[Chunk, Speaker], None] | None = None,
+                     on_chunk_result: Callable[[Chunk, bytes | None, Exception | None], None] | None = None) -> dict:
         state = self.load(pid)
         if state.recovery.blocked:
             raise RecoveryBlocked("render blocked pending operator recovery: "
@@ -254,7 +257,16 @@ class AudiobookService:
                 speaker = state.speakers.get(chunk.speaker)
                 if speaker is None:
                     raise AudiobookError(f"chunk {chunk.id} references unknown speaker {chunk.speaker}")
-                wav = await synth(chunk.text, speaker.voice, speaker.speed)
+                if on_chunk_attempt is not None:
+                    on_chunk_attempt(chunk, speaker)
+                try:
+                    wav = await synth(chunk.text, speaker.voice, speaker.speed)
+                except Exception as exc:
+                    if on_chunk_result is not None:
+                        on_chunk_result(chunk, None, exc)
+                    raise
+                if on_chunk_result is not None:
+                    on_chunk_result(chunk, wav, None)
                 path.write_bytes(wav)
                 chunk.audio_file = f"chunks/{chunk.id}.wav"
                 chunk.sha256 = audio.sha256_bytes(wav)

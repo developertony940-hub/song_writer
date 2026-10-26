@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.config import get_settings
-from app.routers import assets, audiobook, generate, projects, runtime
+from app.routers import assets, audiobook, generate, music, profiles, projects, replacement, runtime
 from app.services.comfyui_client import get_comfyui
 from app.services.lmstudio_client import get_lmstudio
 from app.services.model_router import get_router
@@ -69,6 +69,9 @@ def create_app() -> FastAPI:
     app.include_router(generate.router)
     app.include_router(runtime.router)
     app.include_router(audiobook.router)
+    app.include_router(music.router)
+    app.include_router(profiles.router)
+    app.include_router(replacement.router)
 
     # Frontend
     STATIC_DIR.mkdir(parents=True, exist_ok=True)

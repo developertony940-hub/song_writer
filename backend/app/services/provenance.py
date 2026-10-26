@@ -25,6 +25,7 @@ WORKFLOW_VERSIONS: dict[str, str] = {
     "upscale_esrgan": "1.0.0",
     "wan21_i2v_14b_fp8": "1.0.0",
     "wan21_t2v_14b_fp8": "1.0.0",
+    "ace_step_1_5_aio": "1.0.0",
 }
 
 # A prompt revision must change either its semantic version or its template text.
@@ -38,6 +39,7 @@ PROMPT_SPECS: dict[str, tuple[str, str]] = {
     "video.generate": ("1.0.0", "Generate one motion clip from a supplied motion prompt and optional source image."),
     "video.upscale": ("1.0.0", "Upscale a supplied video using the selected enhancement model and workflow."),
     "audio.synthesize": ("1.0.0", "Synthesize narration from validated voiceover text."),
+    "music.generate": ("1.0.0", "Generate a song from versioned lyrics and musical direction using ACE-Step 1.5."),
     "render.composition": ("1.0.0", "Render a normalized edit decision list using the selected delivery profile."),
     "asset.user_supplied": ("1.0.0", "Persist a user-supplied artifact without implying model generation."),
 }

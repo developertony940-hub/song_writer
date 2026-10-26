@@ -26,7 +26,7 @@ safetensors. It does **not** use GGUF files or `UnetLoaderGGUF` /
 6. Start the backend and require a successful preflight before generation:
 
    ```text
-   GET http://127.0.0.1:8000/api/runtime/preflight
+   GET http://127.0.0.1:7664/api/runtime/preflight
    ```
 
 ## Required model files

@@ -12,8 +12,9 @@
 name = "song_writer"
 version = "0.1.0"
 host = "127.0.0.1"
-port = 8000
+port = 7664
 projects_root = "projects"
+profiles_root = "profiles"
 
 [runtime.lmstudio]
 base_url = "http://127.0.0.1:1234/v1"
@@ -83,6 +84,45 @@ signing_secret = ""
 # render requests server-side; deterministic fake synthesis used by isolated
 # tests is unaffected.
 live_generation_authorized = false
+
+[music]
+# ACE-Step 1.5 is the selected local music runtime. Keep live generation false
+# until a dedicated process is explicitly authorized for a bounded submission.
+live_generation_authorized = false
+# Set true only after an explicitly approved capacity-preparation step verifies
+# enough free physical GPU1 memory for the selected ACE-Step workflow.
+capacity_verified = false
+# Process-scoped experimental authorization. This is NOT verified capacity and
+# must never be presented as capacity proof. The explicit -Music startup mode
+# sets this only in its own process; ordinary startup keeps it false.
+capacity_override_authorized = false
+# Section-level repaint integration (offline). Submission remains refused while
+# repaint_enabled is false; the first model load additionally requires a
+# separately approved capacity gate. No model loads at installation time.
+repaint_enabled = false
+repaint_service_url = "http://127.0.0.1:8021"
+repaint_output_format = "wav32"
+repaint_crossfade_ms = 10
+repaint_min_free_vram_mib = 6144
+repaint_fake_provider = false
+engine = "ace-step-1.5"
+checkpoint = "ace_step_1.5_turbo_aio.safetensors"
+checkpoint_sha256 = "67b0f43aa5c51c840bd0228e6a935d8ff416ec87e5df2fc0637da17a561252bc"
+workflow = "ace_step_1_5_aio"
+max_submission_cap = 4
+default_duration_s = 30.0
+# Section names preflight checks recognize in [bracketed] lyric tags.
+known_sections = [
+  "intro", "verse", "pre-chorus", "chorus", "post-chorus", "bridge",
+  "outro", "inst", "instrumental", "hook", "breakdown", "interlude",
+]
+# Estimated seconds sung per non-tag lyric line, for preflight density checks.
+preflight_seconds_per_line = 6.0
+# Registry caps for stored critique summaries and alternative lyric variants.
+max_critiques = 20
+max_variants = 30
+# Drop-oldest cap for per-project song revision snapshots.
+max_revisions = 30
 
 [provenance]
 schema_version = 1

@@ -57,8 +57,38 @@ def test_launch_script_uses_non_reserved_bind_host_parameter():
     launcher = Path(__file__).resolve().parents[2] / "run.ps1"
     content = launcher.read_text(encoding="utf-8")
     assert "[string]$BindHost" in content
-    assert "--host $BindHost" in content
+    assert ("--host $BindHost" in content) or ("'--host', $BindHost" in content)
     assert "[string]$Host" not in content
+
+
+def test_music_launch_mode_is_explicit_and_non_reloading():
+    launcher = Path(__file__).resolve().parents[2] / "run.ps1"
+    content = launcher.read_text(encoding="utf-8")
+    assert "[switch]$Music" in content
+    assert "[switch]$Reload" in content
+    assert "LOCALAI_MUSIC__CAPACITY_OVERRIDE_AUTHORIZED = 'true'" in content
+    assert "Music mode cannot be combined with -Reload" in content
+    assert "Capacity: EXPERIMENTAL OVERRIDE - NOT VERIFIED" in content
+
+
+def test_music_launcher_starts_comfyui_only_when_port_is_idle():
+    launcher = Path(__file__).resolve().parents[2] / "run_music.ps1"
+    content = launcher.read_text(encoding="utf-8")
+    assert "$ComfyPort = 8188" in content
+    assert "S:\\ComfyUI\\run_nvidia_gpu.bat" in content
+    assert "[string]$ComfyLauncher" in content
+    assert "function Test-ComfyUiPort" in content
+    assert "function Start-ComfyUiIfNeeded" in content
+    assert content.count("Start-Process") == 1
+    assert "Start-Process -FilePath $ComfyLauncher" in content
+    assert "Split-Path -Parent $ComfyLauncher" in content
+    assert "ComfyUI is already listening" in content
+    assert "ComfyUI did not answer" in content
+    assert "Would also start ComfyUI" in content
+    check_only_at = content.index("if ($CheckOnly)")
+    launch_call_at = content.index("\nStart-ComfyUiIfNeeded\n")
+    assert check_only_at < launch_call_at
+    assert launch_call_at < content.index("& $VenvPython -m uvicorn")
 
 
 def test_all_shipped_workflows_have_semantic_provenance_versions():

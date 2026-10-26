@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{{ settings.name }}</title>
-  <link rel="stylesheet" href="/static/app.css?v=10">
+  <link rel="stylesheet" href="/static/app.css?v=14">
 </head>
 <body>
   <header class="topbar">
@@ -40,6 +40,8 @@
           <button data-tab="timeline" class="tab">Timeline</button>
           <button data-tab="brief" class="tab">Brief</button>
           <button data-tab="audiobook" class="tab">Audiobook</button>
+          <button data-tab="music" class="tab">Music</button>
+          <button data-tab="artists" class="tab">Artists</button>
         </nav>
         <div class="stage-status" id="stage-status"></div>
 
@@ -289,6 +291,216 @@
             <button id="ab-clear-recovery-btn" class="primary">Clear Recovery</button>
           </div>
         </section>
+
+        <!-- Music tab (ACE-Step 1.5, separate from narration/social video) -->
+        <section class="tab-panel" data-panel="music" hidden>
+          <div class="gen-form">
+            <h3>Music - ACE-Step 1.5</h3>
+            <p class="muted">Save and explicitly approve exact lyrics and musical settings before generation. Live generation is disabled unless a dedicated process is authorized. Audio approval is separate and bound to the exact output bytes.</p>
+            <div id="music-runtime" class="muted"></div>
+            <label>Musical direction</label>
+            <textarea id="music-direction" rows="3" placeholder="Genre, mood, instrumentation, vocal style"></textarea>
+            <label>Lyrics (structure tags allowed)</label>
+            <textarea id="music-lyrics" rows="8" placeholder="[Verse 1]&#10;First verse lyrics&#10;[Chorus 1]&#10;Chorus lyrics&#10;[Verse 2]&#10;Second verse lyrics&#10;[Final Chorus]&#10;Final chorus lyrics" aria-describedby="music-lyrics-help"></textarea>
+            <p id="music-lyrics-help" class="muted">Put each [section tag] on its own line and sung words below it. Match arrangement names exactly, including case: Verse 1, Verse 2, Chorus 2, and Final Chorus are separate sections. Keep timing, instruments, and performance instructions in the arrangement plan, not sung lines. For an instrumental-only section, put its own tag in the lyrics and describe the instrumental passage in the plan; sung text is not needed. Tags organize the draft; they do not guarantee the generated structure.</p>
+            <label>Arrangement Plan (freeform message, one section per line - separate from the sung lyrics)</label>
+            <div id="music-arrangement-info" class="muted"></div>
+            <textarea id="music-arrangement-text" rows="6" aria-describedby="music-arrangement-info" placeholder="Intro&#9;Target 0:00-0:12; instrumental acoustic guitar, fiddle, pedal steel.&#10;Verse 1&#9;Target 0:12-0:36; restrained accompaniment, intimate storytelling.&#10;Verse 2&#9;Build accompaniment gently.&#10;Chorus 1&#9;Fuller two-step rhythm, nostalgic lift.&#10;Final Chorus&#9;Strong final lift; sustained closing phrase."></textarea>
+            <div id="music-arrangement-rows"></div>
+            <div class="row">
+              <input id="music-arrangement-new-section" placeholder="Add a section by name (e.g. bridge)" style="width:220px">
+              <button id="music-arrangement-add" type="button">Add section</button>
+            </div>
+            <div id="music-arrangement-preview" class="muted"></div>
+            <audio id="music-arrangement-audio" preload="metadata"></audio>
+            <div class="row">
+              <span id="music-arrangement-playback" class="muted"></span>
+              <button id="music-arrangement-stop" type="button" disabled>Stop plan audition</button>
+            </div>
+            <div class="row">
+              <label class="ab-inline">Requested duration (s) <input id="music-duration" type="number" min="10" max="600" step="1" value="30" style="width:90px"></label>
+              <label class="ab-inline">BPM <input id="music-bpm" type="number" min="10" max="300" value="120" style="width:80px"></label>
+              <label class="ab-inline">Time signature <select id="music-timesig"><option>4</option><option>3</option><option>6</option><option>2</option></select></label>
+              <label class="ab-inline">Key <select id="music-keyscale"></select></label>
+              <label class="ab-inline">Language <select id="music-language"><option value="en">en</option><option value="es">es</option><option value="fr">fr</option><option value="de">de</option><option value="it">it</option><option value="pt">pt</option><option value="ja">ja</option><option value="ko">ko</option><option value="zh">zh</option></select></label>
+            </div>
+            <div class="row">
+              <label class="ab-inline">Seed <input id="music-seed" type="number" min="0" value="0" style="width:150px"></label>
+              <label class="ab-inline"><input type="checkbox" id="music-audio-codes" checked> Generate audio codes (slower, higher quality)</label>
+            </div>
+            <div class="row">
+              <label class="ab-inline">Temperature <input id="music-temperature" type="number" min="0.05" max="2" step="0.05" placeholder="auto" style="width:90px"></label>
+              <label class="ab-inline">Top-P <input id="music-topp" type="number" min="0" max="1" step="0.05" placeholder="auto" style="width:90px"></label>
+              <label class="ab-inline">CFG <input id="music-cfg" type="number" min="0.1" max="10" step="0.1" placeholder="auto" style="width:90px"></label>
+            </div>
+            <div class="row">
+              <button id="music-save-btn" class="primary">Save draft</button>
+              <button id="music-approve-btn" class="primary">Approve lyrics/settings</button>
+              <button id="music-generate-btn" class="primary">Generate</button>
+              <button id="music-cancel-btn">Cancel</button>
+              <button id="music-recover-btn">Recover</button>
+            </div>
+            <div class="row">
+              <input id="music-revision-name" placeholder="Revision name (optional label for Create revision)" style="flex:1">
+              <button id="music-revision-btn">Create revision</button>
+            </div>
+            <p class="muted">Save draft stores changed lyrics/settings as a new revision. Create revision also labels that changed draft; a name alone does not rename an existing revision. Compare uses saved revisions, not unsaved form edits. Restoring creates a new saved revision and reloads the form; save your edits first if you want to keep them.</p>
+            <div class="row">
+              <label class="ab-inline">Submission cap <input id="music-cap" type="number" min="1" max="10" value="1" style="width:80px"></label>
+              <input id="music-approval-note" placeholder="Approval note (required)" style="flex:1">
+            </div>
+            <div id="music-status" class="muted"></div>
+            <div id="music-blockers" class="muted"></div>
+            <div id="music-attempts" class="muted"></div>
+            <div id="music-preflight" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Latest audio</h3>
+            <div id="music-latest" class="muted"></div>
+            <audio id="music-player" controls style="width:100%;display:none"></audio>
+            <div class="row">
+              <a id="music-download" class="download-link" href="#" download hidden>Download audio</a>
+              <input id="music-audio-note" placeholder="Audio approval note (required)" style="flex:1">
+              <button id="music-audio-approve-btn" class="primary">Approve exact audio</button>
+            </div>
+            <div id="music-audio-status" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Takes</h3>
+            <div id="music-takes" class="muted"></div>
+            <div class="row">
+              <input id="music-prefer-note" placeholder="Preferred-take note (required to select a take)" style="flex:1">
+            </div>
+            <div id="music-preferred" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Section Edit (Repaint)</h3>
+            <div id="music-repaint-info" class="muted"></div>
+            <div class="row">
+              <label class="ab-inline">Source take <select id="music-repaint-source"></select></label>
+            </div>
+            <audio id="music-repaint-audio" preload="metadata"></audio>
+            <div id="music-repaint-source-meta" class="muted"></div>
+            <div id="music-repaint-suggestions" class="muted"></div>
+            <div class="row">
+              <label class="ab-inline">Section occurrence <select id="music-repaint-section"></select></label>
+              <button id="music-repaint-shared-start" type="button" disabled>Use previous confirmed end as start</button>
+            </div>
+            <div id="music-repaint-chips" class="muted"></div>
+            <div id="music-repaint-review" class="muted"></div>
+            <div class="row">
+              <label class="ab-inline">Start (M:SS.mmm) <input id="music-repaint-start" type="text" inputmode="decimal" placeholder="0:00.000" style="width:120px"></label>
+              <label class="ab-inline">End (M:SS.mmm) <input id="music-repaint-end" type="text" inputmode="decimal" placeholder="0:00.000" style="width:120px"></label>
+              <button id="music-repaint-play-selection" type="button">Play Selection</button>
+              <button id="music-repaint-stop" type="button">Stop</button>
+              <button id="music-repaint-confirm" type="button">Confirm Boundaries</button>
+              <span id="music-repaint-confirmed" class="muted"></span>
+              <span id="music-repaint-playback" class="muted"></span>
+            </div>
+            <label>Correction guidance (separate from lyrics)</label>
+            <textarea id="music-repaint-prompt" rows="2" placeholder="make the fiddle gentler; retain the acoustic guitar, tempo, and mood"></textarea>
+            <div class="row">
+              <input id="music-repaint-note" placeholder="authorization note" style="width:220px">
+              <button id="music-repaint-save" class="primary">Save proposal</button>
+              <button id="music-repaint-authorize" type="button">Authorize</button>
+              <button id="music-repaint-revise" type="button">Revise</button>
+              <button id="music-repaint-submit" type="button">Submit candidate</button>
+              <button id="music-repaint-recover" type="button">Confirm stop / recover</button>
+            </div>
+            <div id="music-repaint-status" class="muted"></div>
+            <div id="music-repaint-list"></div>
+            <div id="music-repaint-compare" class="muted"></div>
+            <audio id="music-repaint-source-context" controls style="width:100%"></audio>
+            <audio id="music-repaint-candidate-audio" controls style="width:100%"></audio>
+            <div class="row">
+              <button id="music-repaint-apply" class="primary">Apply as new version</button>
+              <button id="music-repaint-reject" type="button">Reject candidate</button>
+            </div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Revisions</h3>
+            <div id="music-revisions" class="muted"></div>
+            <div class="row">
+              <label class="ab-inline">Compare
+                <select id="music-compare-from"></select>
+                <span>&nbsp;to&nbsp;</span>
+                <select id="music-compare-to"></select>
+              </label>
+              <button id="music-compare-btn">Compare</button>
+            </div>
+            <div id="music-compare-out" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Music assets</h3>
+            <div id="music-assets" class="asset-grid"></div>
+          </div>
+        </section>
+
+        <!-- Artist profiles tab (production presets, separate storage) -->
+        <section class="tab-panel" data-panel="artists" hidden>
+          <div class="gen-form">
+            <h3>Artist Profiles</h3>
+            <p class="muted">Production preset; singer identity not verified. Reference conditioning is disabled. Recorded settings are captured from the selected completed take, never the current draft.</p>
+            <label>Source take (completed, current project)</label>
+            <select id="profile-take"></select>
+            <label>Profile name</label>
+            <input id="profile-name" maxlength="80" placeholder="e.g. Warm acoustic storyteller">
+            <label>Artist description (user-added)</label>
+            <textarea id="profile-artist" rows="2" placeholder="Descriptive production notes, not a verified identity"></textarea>
+            <label>Vocal description (user-added)</label>
+            <textarea id="profile-vocal" rows="2" placeholder="e.g. close-mic baritone, restrained vibrato"></textarea>
+            <label>Production defaults (user-added; applied only when selected on load)</label>
+            <div class="row">
+              <input id="profile-default-direction" placeholder="default musical direction" style="width:260px">
+              <input id="profile-default-language" placeholder="language (en)" style="width:120px">
+              <input id="profile-default-codes" type="checkbox">
+              <span class="muted">audio codes</span>
+              <input id="profile-default-temperature" type="number" min="0.05" max="2" step="0.05" placeholder="temperature" style="width:120px">
+              <input id="profile-default-topp" type="number" min="0" max="1" step="0.01" placeholder="top-p" style="width:100px">
+              <input id="profile-default-cfg" type="number" min="0.1" max="10" step="0.1" placeholder="cfg" style="width:90px">
+            </div>
+            <div class="row">
+              <button id="profile-save" class="primary">Save Artist Profile from Take</button>
+              <button id="profile-update" type="button" disabled>Save New Version</button>
+            </div>
+            <div id="profile-status" class="muted"></div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Profiles</h3>
+            <div id="profile-list" class="muted">No profiles loaded.</div>
+          </div>
+
+          <div class="gen-form">
+            <h3>Profile details and load</h3>
+            <div id="profile-details" class="muted">Select a profile.</div>
+            <div class="row">
+              <label class="ab-inline">Version <select id="profile-version"></select></label>
+            </div>
+            <div class="row">
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-bpm" checked> exclude tempo</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-key" checked> exclude key</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-timesig" checked> exclude time signature</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-seed" checked> exclude seed</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-duration" checked> exclude duration</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-exclude-arrangement" checked> exclude arrangement</label>
+            </div>
+            <div class="row">
+              <label class="ab-inline"><input type="checkbox" id="profile-apply-defaults"> apply user-added production defaults</label>
+              <label class="ab-inline"><input type="checkbox" id="profile-ack-unverified"> acknowledge unverified compatibility</label>
+            </div>
+            <div class="row">
+              <button id="profile-preview" type="button">Preview load</button>
+              <button id="profile-load" class="primary" disabled>Confirm load into project</button>
+            </div>
+            <div id="profile-preview-out" class="muted"></div>
+          </div>
+        </section>
       </div>
     </section>
   </main>
@@ -298,7 +510,7 @@
     <div class="progress-bar" id="progress-bar"></div>
     <span id="progress-label">Working…</span>
   </div>
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/app.js?v=46"></script>
 </body>
 </html>
 

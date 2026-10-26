@@ -11,6 +11,10 @@
 /projects/*
 !/projects/.gitkeep
 
+# Runtime-generated artist profiles. They can contain lyrics and user notes.
+/profiles/*
+!/profiles/.gitkeep
+
 # Generated ComfyUI previews
 /comfyui/workflows/*_output.*
 

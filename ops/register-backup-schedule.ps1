@@ -1,22 +1,22 @@
 <#
 .SYNOPSIS
   Registers the weekly-full + daily-differential backup schedule for
-  LocalAIContent projects using the configured source and backup root.
+  song_writer projects using the configured source and backup root.
 
   Creates two Windows Scheduled Tasks:
-    LocalAIContent-Backup-Full   - every Sunday 03:00, weekly
-    LocalAIContent-Backup-Diff  - Monday-Saturday 03:00, daily
+    song_writer-Backup-Full   - every Sunday 03:00, weekly
+    song_writer-Backup-Diff  - Monday-Saturday 03:00, daily
 
   Runs whether the user is logged in or not. Uses the current user.
 
 .EXAMPLE
-  .\ops\register-backup-schedule.ps1 -Source "C:\LocalAIContent\projects" -BackupRoot "E:\Backups\LocalAIContent"
+  .\ops\register-backup-schedule.ps1 -Source "D:\AIOS\development\song_writer\projects" -BackupRoot "E:\Backups\song_writer"
   # Or set LOCALAI_PROJECTS_ROOT and LOCALAI_PROJECTS_BACKUP_ROOT.
 
 .NOTES
   To unregister later:
-    Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Full'  -Confirm:$false
-    Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Diff'  -Confirm:$false
+    Unregister-ScheduledTask -TaskName 'song_writer-Backup-Full'  -Confirm:$false
+    Unregister-ScheduledTask -TaskName 'song_writer-Backup-Diff'  -Confirm:$false
 #>
 
 [CmdletBinding()]
@@ -58,8 +58,8 @@ $fullSettings = New-ScheduledTaskSettingsSet `
     -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 10)
 
 Register-ScheduledTask `
-    -TaskName 'LocalAIContent-Backup-Full' `
-    -Description 'Weekly FULL mirror of configured LocalAIContent project source' `
+    -TaskName 'song_writer-Backup-Full' `
+    -Description 'Weekly FULL mirror of configured song_writer project source' `
     -Action $fullAction -Trigger $fullTrigger -Settings $fullSettings `
     -User $currentUser -RunLevel Highest -Force | Out-Null
 
@@ -75,19 +75,19 @@ $diffSettings = New-ScheduledTaskSettingsSet `
     -RestartCount 2 -RestartInterval (New-TimeSpan -Minutes 10)
 
 Register-ScheduledTask `
-    -TaskName 'LocalAIContent-Backup-Diff' `
-    -Description 'Daily DIFFERENTIAL mirror of configured LocalAIContent project source' `
+    -TaskName 'song_writer-Backup-Diff' `
+    -Description 'Daily DIFFERENTIAL mirror of configured song_writer project source' `
     -Action $diffAction -Trigger $diffTrigger -Settings $diffSettings `
     -User $currentUser -RunLevel Highest -Force | Out-Null
 
 Write-Host "Both tasks registered." -ForegroundColor Green
 Write-Host ""
 Write-Host "Verify:"
-Write-Host "  Get-ScheduledTask -TaskName 'LocalAIContent-Backup-*' | Select TaskName,State,Author"
+Write-Host "  Get-ScheduledTask -TaskName 'song_writer-Backup-*' | Select TaskName,State,Author"
 Write-Host ""
 Write-Host "Run the full backup now to seed the configured backup root:"
 Write-Host "  powershell -NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`" -Mode full $backupArguments"
 Write-Host ""
 Write-Host "Unregister later:"
-Write-Host "  Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Full' -Confirm:`$false"
-Write-Host "  Unregister-ScheduledTask -TaskName 'LocalAIContent-Backup-Diff' -Confirm:`$false"
+Write-Host "  Unregister-ScheduledTask -TaskName 'song_writer-Backup-Full' -Confirm:`$false"
+Write-Host "  Unregister-ScheduledTask -TaskName 'song_writer-Backup-Diff' -Confirm:`$false"
