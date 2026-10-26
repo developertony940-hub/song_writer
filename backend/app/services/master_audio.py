@@ -918,14 +918,15 @@ class MasterAudioService:
                 fail("label must be text up to 120 characters")
             confirmation = clip["confirmation"]
             keys(confirmation, {"confirmed", "source_sha256", "start_s", "end_s"}, {"confirmed", "source_sha256", "start_s", "end_s"})
-            if confirmation["confirmed"] is not True or confirmation["source_sha256"] != sid:
-                fail("explicit listening confirmation with exact source SHA is required", "confirmation_required", 409)
+            if type(confirmation["confirmed"]) is not bool or confirmation["source_sha256"] != sid:
+                fail("boolean review state with exact source SHA is required", "confirmation_required", 409)
             if number(confirmation["start_s"], "confirmation.start_s", 0, source["duration_s"]) != start or number(confirmation["end_s"], "confirmation.end_s", 0, source["duration_s"]) != end:
                 fail("listening confirmation range is stale", "confirmation_required", 409)
             normalized = {"clip_id": clip_id, "source_id": sid, "source_sha256": sid,
                           "start_s": start, "end_s": end, "start_frame": a, "end_frame": b,
                           "gain_db": gain, "fade_in_s": fade_in, "fade_out_s": fade_out, "label": label}
-            normalized["confirmation"] = {**confirmation, "confirmed_at": now(), "clip_sha256": digest(normalized)}
+            normalized["confirmation"] = {**confirmation, "confirmed_at": now() if confirmation["confirmed"] else None,
+                                          "clip_sha256": digest(normalized) if confirmation["confirmed"] else None}
             result.append(normalized)
             total += length
         if total > MAX_DURATION:
@@ -971,7 +972,7 @@ class MasterAudioService:
             for clip in revision["sections"]:
                 without = {k: v for k, v in clip.items() if k != "confirmation"}
                 if clip["confirmation"].get("confirmed") is not True or clip["confirmation"].get("clip_sha256") != digest(without):
-                    fail("clip confirmation invalid", "confirmation_required", 409)
+                    fail("all section boundaries must be listening-confirmed before building a master; save draft progress freely", "confirmation_required", 409)
             directory = confined(root, f"renders/{rid}", exists=False)
             directory.mkdir()
             claim = {"schema_version": 1, "render_id": rid, "revision": revision["revision"],

@@ -42,5 +42,5 @@ test('UI uses explicit ripple insertion and warns before shortening an existing 
  assert.match(js,/next=insertClip\(state.sections,c,placement,anchorId\)/);
  assert.match(js,/This trims/);assert.match(js,/Apply this trim\?/);
  assert.match(html,/id="insert-destination"/);assert.match(html,/Ripple insert/);
- assert.match(js,/mastering-core.mjs\?v=rippleinsert1/);
+ assert.match(js,/mastering-core.mjs\?v=draftsave1/);
 });
