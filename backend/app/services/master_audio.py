@@ -9,11 +9,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import multiprocessing
 import os
 import re
 import stat
 import subprocess
 import threading
+import time
 import uuid
 import wave
 from array import array
@@ -27,6 +29,10 @@ MAX_TOTAL_SOURCE_DURATION = 7200
 MAX_SOURCES = 32
 MAX_SECTIONS = 64
 MAX_REVISIONS = 500
+MAX_ANALYSES = 32
+MAX_MAPS = 100
+ANALYSIS_TIMEOUT_S = 20
+ANALYSIS_WINDOW_FRAMES = 4800  # 100 ms; at most 18,000 feature windows.
 RATE = 48000
 CHANNELS = 2
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
@@ -159,6 +165,124 @@ def number(value, name, low, high):
 def keys(value, allowed, required=()):
     if not isinstance(value, dict) or set(value) - set(allowed) or set(required) - set(value):
         fail("object has missing or unsupported fields")
+
+
+def section_label(value):
+    if (not isinstance(value, str) or not value.strip() or len(value) > 120
+            or any(ord(c) < 32 or ord(c) == 127 for c in value)):
+        fail("section label must be nonempty text up to 120 characters without controls")
+    return value.strip()
+
+
+def analyze_pcm(path, frames, labels):
+    """Bounded streaming acoustic heuristics, never semantic/lyric recognition.
+
+    100 ms windows, sampling both channels at 2.4 kHz for cheap RMS and
+    rough waveform-change features. This is deliberately not a music model.
+    Only feature windows (not the recording) are retained in memory.
+    """
+    deadline = time.monotonic() + ANALYSIS_TIMEOUT_S
+    energy, texture = [], []
+    try:
+        with wave.open(str(path), "rb") as audio:
+            if (audio.getnchannels(), audio.getsampwidth(), audio.getframerate(), audio.getnframes()) != (CHANNELS, 2, RATE, frames):
+                fail("analysis PCM format or frame count mismatch", "stale_source", 409)
+            consumed = 0
+            while consumed < frames:
+                if time.monotonic() > deadline:
+                    fail("local analysis time limit reached; no suggestion saved", "analysis_timeout", 503)
+                count = min(ANALYSIS_WINDOW_FRAMES, frames - consumed)
+                block = audio.readframes(count)
+                if len(block) != count * CHANNELS * 2:
+                    fail("analysis PCM truncated", "stale_source", 409)
+                samples = array("h", block)
+                if os.sys.byteorder != "little":
+                    samples.byteswap()
+                # No channel cancellation; both stereo channels contribute.
+                left, right = samples[::40], samples[1::40]
+                power = sum(x * x for x in left) + sum(x * x for x in right)
+                rms = math.sqrt(power / (len(left) + len(right))) / 32768
+                energy.append(20 * math.log10(max(rms, 1e-6)))
+                change = sum(abs(a - b) for channel in (left, right) for a, b in zip(channel, channel[1:]))
+                texture.append(change / max(1, len(left) + len(right) - 2) / max(rms * 32768, 1))
+                consumed += count
+    except (wave.Error, OSError, EOFError):
+        fail("cannot read source PCM for local analysis", "processing_failed", 502)
+
+    def mean(values, a, b):
+        return sum(values[a:b]) / (b - a)
+
+    candidates = []
+    # Compare one-second neighborhoods, never infer semantic verse/chorus.
+    for i in range(10, len(energy) - 9):
+        before, after = mean(energy, i - 10, i), mean(energy, i, i + 10)
+        delta = abs(after - before)
+        silence = (before < -48) != (after < -48)
+        timbre = abs(mean(texture, i - 10, i) - mean(texture, i, i + 10))
+        if silence or delta >= 7 or (timbre >= 0.45 and min(before, after) > -48):
+            score = (20 if silence else 0) + delta + min(timbre * 8, 12)
+            reason = "silence_transition" if silence else "energy_change" if delta >= 7 else "waveform_change"
+            candidates.append((score, i * ANALYSIS_WINDOW_FRAMES, reason))
+    # Suppress neighboring candidates, keep strongest evidence, and reserve
+    # at least two seconds per suggested region. Hints never set the count.
+    selected = []
+    minimum = 2 * RATE
+    for score, frame, reason in sorted(candidates, reverse=True):
+        if (minimum <= frame <= frames - minimum
+                and all(abs(frame - old[0]) >= minimum for old in selected)):
+            selected.append((frame, reason))
+            if len(selected) == MAX_SECTIONS - 1:
+                break
+    boundaries = [(0, "source_start")] + sorted(selected) + [(frames, "source_end")]
+    sections = []
+    for i, ((start, reason), (end, _)) in enumerate(zip(boundaries, boundaries[1:])):
+        sections.append({"label": labels[i] if i < len(labels) else f"Section {i + 1}",
+                         "start_s": start / RATE, "end_s": end / RATE, "confirmed": False,
+                         "confidence": "medium" if reason == "silence_transition" else "low",
+                         "boundary_reason": reason})
+    return sections, len(energy)
+
+
+def _analysis_worker(connection, path, frames, labels):
+    """Separate CPU worker gives the caller a real wall-clock stop/kill bound."""
+    try:
+        connection.send({"result": analyze_pcm(path, frames, labels)})
+    except MasterAudioError as exc:
+        connection.send({"error": [str(exc), exc.code, exc.status]})
+    except Exception:
+        connection.send({"error": ["local PCM analysis failed", "processing_failed", 502]})
+    finally:
+        connection.close()
+
+
+def bounded_analysis(path, frames, labels):
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    worker = context.Process(target=_analysis_worker, args=(sender, str(path), frames, labels), daemon=True)
+    try:
+        worker.start()
+        sender.close()
+        if not receiver.poll(ANALYSIS_TIMEOUT_S):
+            fail("local analysis time limit reached; no suggestion saved", "analysis_timeout", 503)
+        try:
+            response = receiver.recv()
+        except EOFError:
+            fail("local PCM analysis worker stopped", "processing_failed", 502)
+        if "error" in response:
+            raise MasterAudioError(*response["error"])
+        return response["result"]
+    finally:
+        receiver.close()
+        sender.close()
+        if worker.pid is not None:
+            worker.join(timeout=0.1)
+            if worker.is_alive():
+                worker.terminate()
+                worker.join(timeout=0.5)
+            if worker.is_alive():
+                worker.kill()
+                worker.join(timeout=0.5)
+            worker.close()
 
 
 class MasterAudioService:
@@ -341,6 +465,147 @@ class MasterAudioService:
             if relative.split("/")[0] not in {"audio", "music"}:
                 fail("source must be an existing project audio/ or music/ asset")
             return self._import(pid, root, path, relative)
+
+    def _section_source(self, pid, root, source_id):
+        """Cap evidence sizes before the existing immutable-source verifier."""
+        source = self._source(pid, root, source_id, verify=False)
+        frames = source.get("frames")
+        if (isinstance(frames, bool) or not isinstance(frames, int) or not 0 < frames <= MAX_DURATION * RATE
+                or source.get("duration_s") != frames / RATE
+                or source.get("sample_rate") != RATE or source.get("channels") != CHANNELS
+                or not isinstance(source.get("pcm_sha256"), str) or not SHA_RE.fullmatch(source["pcm_sha256"])):
+            fail("invalid source PCM metadata", "evidence_invalid", 409)
+        for field, limit in (("raw_path", MAX_BYTES), ("pcm_path", frames * CHANNELS * 2 + 1024 * 1024)):
+            path = confined(root, source.get(field))
+            if not 0 < path.stat().st_size <= limit:
+                fail("source evidence exceeds bounded analysis limits", "stale_source", 409)
+        return self._source(pid, root, source_id)
+
+    def _section_history(self, root, source, kind):
+        directory = confined(root, f"sources/{source['source_id']}/{kind}", exists=False)
+        directory.mkdir(exist_ok=True)
+        limit = MAX_ANALYSES if kind == "analyses" else MAX_MAPS
+        paths = []
+        for path in directory.iterdir():
+            paths.append(path)
+            if len(paths) > limit:
+                fail("section history exceeds record limit", "evidence_invalid", 409)
+        rows, parent = [], None
+        for index, path in enumerate(sorted(paths), 1):
+            if path.name != f"{index:06d}.json":
+                fail("unexpected section history evidence", "evidence_invalid", 409)
+            path = confined(root, f"sources/{source['source_id']}/{kind}/{path.name}")
+            if path.stat().st_size > 128 * 1024:
+                fail("oversized section record", "evidence_invalid", 409)
+            row = read_json(path)
+            if not isinstance(row, dict):
+                fail("invalid section record", "evidence_invalid", 409)
+            checksum = row.get("record_sha256")
+            content = {k: v for k, v in row.items() if k != "record_sha256"}
+            try:
+                valid_hash = checksum == digest(content)
+            except (TypeError, ValueError):
+                valid_hash = False
+            revision_key = "analysis_revision" if kind == "analyses" else "map_revision"
+            if (not valid_hash or row.get("source_id") != source["source_id"]
+                    or row.get("source_sha256") != source["sha256"] or row.get("pcm_sha256") != source["pcm_sha256"]
+                    or row.get(revision_key) != index or row.get("parent_record_sha256") != parent):
+                fail("section record hash/source/revision binding invalid", "evidence_invalid", 409)
+            rows.append(row)
+            parent = checksum
+        return rows
+
+    def _save_section_record(self, root, source, kind, rows, record):
+        record.update({"schema_version": 1, "source_id": source["source_id"], "source_sha256": source["sha256"],
+                       "pcm_sha256": source["pcm_sha256"], "duration_s": source["duration_s"],
+                       "created_at": now(), "generation": False,
+                       "parent_record_sha256": rows[-1]["record_sha256"] if rows else None})
+        record["record_sha256"] = digest(record)
+        path = confined(root, f"sources/{source['source_id']}/{kind}/{len(rows) + 1:06d}.json", exists=False)
+        write_new(path, record)
+        return record
+
+    def create_analysis(self, pid, source_id, request):
+        keys(request, {"section_labels"})
+        labels = request.get("section_labels", [])
+        if not isinstance(labels, list) or len(labels) > MAX_SECTIONS:
+            fail(f"section_labels must be a list of at most {MAX_SECTIONS} ordered hints")
+        labels = [section_label(label) for label in labels]
+        with self._locked(pid) as root:
+            source = self._section_source(pid, root, source_id)
+            rows = self._section_history(root, source, "analyses")
+            if len(rows) >= MAX_ANALYSES:
+                fail("analysis record limit reached", "size_limit", 413)
+            sections, windows = bounded_analysis(confined(root, source["pcm_path"]), source["frames"], labels)
+            self._section_source(pid, root, source_id)  # Detect changes during analysis.
+            record = {"analysis_id": uuid.uuid4().hex, "analysis_revision": len(rows) + 1,
+                      "kind": "suggestion", "method": "local_pcm_energy_silence_waveform_v1",
+                      "section_labels": labels, "sections": sections, "confidence": "low",
+                      "feature_windows": windows, "window_s": ANALYSIS_WINDOW_FRAMES / RATE,
+                      "limits": {"max_duration_s": MAX_DURATION, "processing_timeout_s": ANALYSIS_TIMEOUT_S,
+                                 "max_sections": MAX_SECTIONS, "max_analyses": MAX_ANALYSES},
+                      "warnings": ["Acoustic suggestions only; not semantic section or lyrics recognition. Listen and adjust every boundary.",
+                                   "Labels are tentative ordered hints, not detected identities. Hint count does not determine section count.",
+                                   "Repetition is not identified; quiet or subtle changes may be missed. No listening confirmation is automatic."]}
+            return self._save_section_record(root, source, "analyses", rows, record)
+
+    def analysis_history(self, pid, source_id):
+        with self._locked(pid) as root:
+            source = self._section_source(pid, root, source_id)
+            return {"source_id": source_id, "analyses": self._section_history(root, source, "analyses")}
+
+    def _map_sections(self, source, sections):
+        if not isinstance(sections, list) or not 1 <= len(sections) <= MAX_SECTIONS:
+            fail(f"sections must contain 1 to {MAX_SECTIONS} contiguous ranges")
+        result, previous = [], 0.0
+        for section in sections:
+            keys(section, {"label", "start_s", "end_s", "confirmed"}, {"label", "start_s", "end_s", "confirmed"})
+            label = section_label(section["label"])
+            start = number(section["start_s"], "start_s", 0, source["duration_s"])
+            end = number(section["end_s"], "end_s", 0, source["duration_s"])
+            if type(section["confirmed"]) is not bool:
+                fail("confirmed must be an explicit boolean")
+            a, b = math.floor(start * RATE + 0.5), math.floor(end * RATE + 0.5)
+            if start != previous or end <= start or b <= a or b > source["frames"]:
+                fail("map must cover the source contiguously in order, without gaps, overlaps or empty sections")
+            result.append({"label": label, "start_s": start, "end_s": end, "confirmed": section["confirmed"]})
+            previous = end
+        if previous != source["duration_s"]:
+            fail("map must end at the complete source duration")
+        return result
+
+    def create_map(self, pid, source_id, request):
+        keys(request, {"expected_map_revision", "analysis_id", "sections"}, {"expected_map_revision", "sections"})
+        expected = request["expected_map_revision"]
+        if isinstance(expected, bool) or not isinstance(expected, int) or expected < 0:
+            fail("expected_map_revision must be a nonnegative integer")
+        analysis_id = request.get("analysis_id")
+        if analysis_id is not None and (not isinstance(analysis_id, str) or not re.fullmatch(r"[a-f0-9]{32}", analysis_id)):
+            fail("analysis_id must be a saved analysis id or null")
+        with self._locked(pid) as root:
+            source = self._section_source(pid, root, source_id)
+            rows = self._section_history(root, source, "maps")
+            if len(rows) != expected:
+                fail(f"map revision conflict: current map revision is {len(rows)}", "map_revision_conflict", 409)
+            if len(rows) >= MAX_MAPS:
+                fail("map record limit reached", "size_limit", 413)
+            if analysis_id is not None:
+                analyses = self._section_history(root, source, "analyses")
+                if not any(row["analysis_id"] == analysis_id for row in analyses):
+                    fail("analysis not found for this source", "analysis_not_found", 404)
+            sections = self._map_sections(source, request["sections"])
+            self._section_source(pid, root, source_id)
+            return self._save_section_record(root, source, "maps", rows,
+                {"kind": "reviewed", "map_revision": len(rows) + 1, "parent_map_revision": len(rows),
+                 "analysis_id": analysis_id, "sections": sections,
+                 "all_confirmed": all(section["confirmed"] for section in sections),
+                 "confirmation_basis": "user_attestation_only", "edit_recipe_created": False})
+
+    def map_history(self, pid, source_id):
+        with self._locked(pid) as root:
+            source = self._section_source(pid, root, source_id)
+            rows = self._section_history(root, source, "maps")
+            return {"source_id": source_id, "map_revision": len(rows), "maps": rows}
 
     def upload_source(self, pid, filename, payload):
         if (not isinstance(filename, str) or not filename.strip() or len(filename) > 255
