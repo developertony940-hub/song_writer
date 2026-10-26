@@ -111,7 +111,7 @@ class ValidationTests(unittest.TestCase):
         self.assert_code("validation", self.revision, None, True)
 
     def test_confirmation_required_exact_boolean_and_source_hash(self):
-        for value in (False, 1, "true"):
+        for value in (1, "true", None):
             clip = self.clip()
             clip["confirmation"]["confirmed"] = value
             self.assert_code("confirmation_required", self.revision, [clip])
@@ -121,6 +121,54 @@ class ValidationTests(unittest.TestCase):
 
     def test_changed_range_invalidates_old_confirmation(self):
         self.assert_code("confirmation_required", self.revision, [self.clip(end_s=0.7)])
+
+    def test_unconfirmed_draft_saves_reloads_and_blocks_render_before_claim(self):
+        clip = self.clip()
+        clip["confirmation"]["confirmed"] = False
+        rev = self.revision([clip])
+        self.assertFalse(rev["sections"][0]["confirmation"]["confirmed"])
+        self.assertIsNone(rev["sections"][0]["confirmation"]["confirmed_at"])
+        self.assertIsNone(rev["sections"][0]["confirmation"]["clip_sha256"])
+        reopened = FakeDecodeService(Store(self.root), settings()).status(PID)
+        self.assertEqual(rev, reopened["revisions"][0])
+        self.assert_code("confirmation_required", self.service.render, PID,
+                         {"expected_revision": 1, "render_id": "draft_render"})
+        self.assertEqual([], self.service.status(PID)["renders"])
+        self.assertFalse((self.project / "master-audio/renders/draft_render").exists())
+
+    def test_draft_following_saved_revision_preserves_prior_bytes_and_review_state(self):
+        first = self.revision()
+        path = self.project / "master-audio/revisions/000001.json"
+        original = path.read_bytes()
+        clip = self.clip(clip_id="draft")
+        clip["confirmation"]["confirmed"] = False
+        second = self.revision([self.clip(), clip], expected=1)
+        self.assertEqual(original, path.read_bytes())
+        self.assertEqual(first["recipe_sha256"], second["parent_recipe_sha256"])
+        self.assertEqual([True, False], [c["confirmation"]["confirmed"] for c in second["sections"]])
+        self.assertEqual(2, self.service.status(PID)["revision"])
+        self.assert_code("confirmation_required", self.service.render, PID,
+                         {"expected_revision": 2, "render_id": "mixed_draft"})
+
+    def test_confirming_draft_creates_new_revision_without_mutating_saved_draft(self):
+        clip = self.clip()
+        clip["confirmation"]["confirmed"] = False
+        self.revision([clip])
+        path = self.project / "master-audio/revisions/000001.json"
+        original = path.read_bytes()
+        second = self.revision(expected=1)
+        self.assertTrue(second["sections"][0]["confirmation"]["confirmed"])
+        self.assertIsNotNone(second["sections"][0]["confirmation"]["clip_sha256"])
+        self.assertEqual(original, path.read_bytes())
+
+    def test_unconfirmed_drafts_still_require_current_source_bounds_and_review_binding(self):
+        clip = self.clip()
+        clip["confirmation"]["confirmed"] = False
+        clip["end_s"] = 0.7
+        self.assert_code("confirmation_required", self.revision, [clip])
+        clip["confirmation"]["end_s"] = 0.7
+        clip["gain_db"] = float("inf")
+        self.assert_code("validation", self.revision, [clip])
 
     def test_source_bounds_and_nonfinite_inputs(self):
         for field, value in (("start_s", -1), ("end_s", 2), ("start_s", float("nan")),

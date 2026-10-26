@@ -60,9 +60,51 @@ async def create_revision(pid: str, request: Request):
     return await run_in_threadpool(_call, "create_revision", pid, await _json(request))
 
 
+@router.post("/sources/{source_id}/analysis")
+async def create_analysis(pid: str, source_id: str, request: Request):
+    return await run_in_threadpool(_call, "create_analysis", pid, source_id, await _json(request))
+
+
+@router.get("/sources/{source_id}/analysis")
+def analysis_history(pid: str, source_id: str):
+    return _call("analysis_history", pid, source_id)
+
+
+@router.post("/sources/{source_id}/maps")
+async def create_map(pid: str, source_id: str, request: Request):
+    return await run_in_threadpool(_call, "create_map", pid, source_id, await _json(request))
+
+
+@router.get("/sources/{source_id}/maps")
+def map_history(pid: str, source_id: str):
+    return _call("map_history", pid, source_id)
+
+
 @router.post("/renders")
 async def render(pid: str, request: Request):
     return await run_in_threadpool(_call, "render", pid, await _json(request))
+
+
+@router.post("/sources/{source_id}/exports")
+async def create_section_export(pid: str, source_id: str, request: Request):
+    return await run_in_threadpool(_call, "create_section_export", pid, source_id, await _json(request))
+
+
+@router.get("/sources/{source_id}/exports")
+def section_exports(pid: str, source_id: str):
+    return _call("section_exports", pid, source_id)
+
+
+@router.get("/section-exports/{export_id}/wav")
+def section_export_wav(pid: str, export_id: str):
+    path = _call("section_export_file", pid, export_id, "wav")
+    return FileResponse(path, media_type="audio/wav", filename=f"section-{export_id}.wav")
+
+
+@router.get("/section-exports/{export_id}/manifest")
+def section_export_manifest(pid: str, export_id: str):
+    path = _call("section_export_file", pid, export_id, "manifest")
+    return FileResponse(path, media_type="application/json", filename=f"section-{export_id}.json")
 
 
 @router.get("/files/{relative:path}")
