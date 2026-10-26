@@ -31,6 +31,9 @@ MAX_SECTIONS = 64
 MAX_REVISIONS = 500
 MAX_ANALYSES = 32
 MAX_MAPS = 100
+MAX_SECTION_EXPORTS = 128
+MAX_SECTION_EXPORT_DURATION = 7200
+SECTION_EXPORT_TIMEOUT_S = 30
 ANALYSIS_TIMEOUT_S = 20
 ANALYSIS_WINDOW_FRAMES = 4800  # 100 ms; at most 18,000 feature windows.
 RATE = 48000
@@ -606,6 +609,199 @@ class MasterAudioService:
             source = self._section_source(pid, root, source_id)
             rows = self._section_history(root, source, "maps")
             return {"source_id": source_id, "map_revision": len(rows), "maps": rows}
+
+    def _export_limits(self):
+        return {"max_exports": MAX_SECTION_EXPORTS, "max_duration_s": MAX_DURATION,
+                "max_total_duration_s": MAX_SECTION_EXPORT_DURATION,
+                "copy_timeout_s": SECTION_EXPORT_TIMEOUT_S}
+
+    def _export_hash(self, path, deadline):
+        """Bounded streaming hash; deadline covers copying and output checking."""
+        h = hashlib.sha256()
+        with path.open("rb") as stream:
+            while block := stream.read(1024 * 1024):
+                if time.monotonic() > deadline:
+                    fail("section export time limit reached", "export_timeout", 503)
+                h.update(block)
+        return h.hexdigest()
+
+    def _export_claim(self, root, export_id):
+        path = confined(root, f"section-exports/{export_id}/claim.json")
+        if path.stat().st_size > 16 * 1024:
+            fail("oversized section export claim", "evidence_invalid", 409)
+        claim = read_json(path)
+        if (not isinstance(claim, dict) or claim.get("export_id") != export_id
+                or not isinstance(claim.get("source_id"), str) or not SHA_RE.fullmatch(claim["source_id"])
+                or claim.get("source_sha256") != claim["source_id"]
+                or not isinstance(claim.get("pcm_sha256"), str) or not SHA_RE.fullmatch(claim["pcm_sha256"])
+                or type(claim.get("start_frame")) is not int or type(claim.get("end_frame")) is not int
+                or not 0 <= claim["start_frame"] < claim["end_frame"] <= MAX_DURATION * RATE
+                or claim.get("duration_s") != (claim["end_frame"] - claim["start_frame"]) / RATE):
+            fail("invalid section export claim", "evidence_invalid", 409)
+        return claim
+
+    def _export_manifest(self, root, export_id, claim, verify_audio=True):
+        relative = f"section-exports/{export_id}"
+        # A failed publication (including an fsync error after writing bytes)
+        # must never expose an otherwise valid-looking success manifest.
+        if confined(root, relative + "/failure.json", exists=False).exists():
+            fail("section export failed; evidence is not a deliverable", "not_found", 404)
+        manifest = confined(root, relative + "/manifest.json")
+        if manifest.stat().st_size > 16 * 1024:
+            fail("oversized section export manifest", "evidence_invalid", 409)
+        record = read_json(manifest)
+        if not isinstance(record, dict):
+            fail("invalid section export manifest", "evidence_invalid", 409)
+        content = {k: v for k, v in record.items() if k != "record_sha256"}
+        try:
+            valid = record.get("record_sha256") == digest(content)
+        except (ValueError, TypeError):
+            valid = False
+        if (not valid or record.get("status") != "completed"
+                or any(record.get(key) != claim.get(key) for key in claim)
+                or record.get("claim_sha256") != digest(claim)):
+            fail("section export manifest binding invalid", "evidence_invalid", 409)
+        expected_path = relative + "/section.wav"
+        output = record.get("files", {}).get("wav", {})
+        if (output.get("relative_path") != expected_path
+                or record.get("frames") != claim["end_frame"] - claim["start_frame"]):
+            fail("section export file binding invalid", "evidence_invalid", 409)
+        if verify_audio:
+            path = confined(root, expected_path)
+            if (path.stat().st_size != output.get("byte_size")
+                    or path.stat().st_size != record["frames"] * CHANNELS * 2 + 44
+                    or self._export_hash(path, time.monotonic() + SECTION_EXPORT_TIMEOUT_S) != output.get("sha256")):
+                fail("immutable exported WAV changed", "stale_export", 409)
+        return record
+
+    def _export_history(self, root):
+        directory = confined(root, "section-exports", exists=False)
+        directory.mkdir(exist_ok=True)
+        paths = []
+        for path in directory.iterdir():
+            paths.append(path)
+            if len(paths) > MAX_SECTION_EXPORTS:
+                fail("section export history exceeds limit", "evidence_invalid", 409)
+        rows = []
+        for path in paths:
+            eid = path.name
+            if not re.fullmatch(r"[a-f0-9]{32}", eid) or is_link(path) or not path.is_dir():
+                fail("unexpected section export evidence", "evidence_invalid", 409)
+            claim_path = confined(root, f"section-exports/{eid}/claim.json", exists=False)
+            if not claim_path.is_file():
+                rows.append({"export_id": eid, "status": "uncertain", "duration_s": MAX_DURATION})
+                continue
+            claim = self._export_claim(root, eid)
+            manifest = confined(root, f"section-exports/{eid}/manifest.json", exists=False)
+            failure = confined(root, f"section-exports/{eid}/failure.json", exists=False)
+            if failure.is_file():
+                rows.append({**claim, "status": "failed", "evidence_preserved": True})
+            elif manifest.is_file():
+                rows.append(self._export_manifest(root, eid, claim, verify_audio=False))
+            else:
+                rows.append({**claim, "status": "uncertain", "evidence_preserved": True})
+        return sorted(rows, key=lambda row: (row.get("created_at", ""), row["export_id"]))
+
+    def section_exports(self, pid, source_id):
+        with self._locked(pid) as root:
+            self._section_source(pid, root, source_id)
+            rows = self._export_history(root)
+            return {"source_id": source_id, "exports": [r for r in rows if r.get("source_id") == source_id],
+                    "limits": self._export_limits()}
+
+    def create_section_export(self, pid, source_id, request):
+        keys(request, {"source_sha256", "start_s", "end_s", "label"},
+             {"source_sha256", "start_s", "end_s", "label"})
+        if (not isinstance(request["source_sha256"], str)
+                or not SHA_RE.fullmatch(request["source_sha256"])):
+            fail("source_sha256 must be the registered source SHA-256")
+        label = section_label(request["label"])
+        with self._locked(pid) as root:
+            source = self._section_source(pid, root, source_id)
+            if request["source_sha256"] != source["sha256"]:
+                fail("export source hash is stale", "stale_source", 409)
+            start = number(request["start_s"], "start_s", 0, source["duration_s"])
+            end = number(request["end_s"], "end_s", 0, source["duration_s"])
+            a, b = math.floor(start * RATE + 0.5), math.floor(end * RATE + 0.5)
+            if end <= start or b <= a or b > source["frames"]:
+                fail("export range must contain at least one source PCM frame")
+            duration = (b - a) / RATE
+            rows = self._export_history(root)
+            if len(rows) >= MAX_SECTION_EXPORTS or sum(r["duration_s"] for r in rows) + duration > MAX_SECTION_EXPORT_DURATION:
+                fail("section export storage/duration limit reached", "size_limit", 413)
+            eid = uuid.uuid4().hex
+            relative = f"section-exports/{eid}"
+            directory = confined(root, relative, exists=False)
+            directory.mkdir()
+            base_url = f"/api/projects/{pid}/master-audio/section-exports/{eid}"
+            claim = {"schema_version": 1, "export_id": eid, "source_id": source_id,
+                     "source_sha256": source["sha256"], "pcm_sha256": source["pcm_sha256"],
+                     "source_frames": source["frames"], "label": label, "created_at": now(),
+                     "requested_start_s": start, "requested_end_s": end,
+                     "start_frame": a, "end_frame": b, "start_s": a / RATE, "end_s": b / RATE,
+                     "duration_s": duration, "generation": False}
+            write_new(directory / "claim.json", claim)
+            try:
+                deadline = time.monotonic() + SECTION_EXPORT_TIMEOUT_S
+                sample_hash = hashlib.sha256()
+                output = directory / "section.wav"
+                with wave.open(str(confined(root, source["pcm_path"])), "rb") as audio:
+                    if (audio.getnchannels(), audio.getsampwidth(), audio.getframerate(), audio.getnframes()) != (CHANNELS, 2, RATE, source["frames"]):
+                        fail("source PCM format/frame mismatch", "stale_source", 409)
+                    audio.setpos(a)
+                    with output.open("xb") as stream:
+                        with wave.open(stream, "wb") as clip:
+                            clip.setparams((CHANNELS, 2, RATE, 0, "NONE", "not compressed"))
+                            remaining = b - a
+                            while remaining:
+                                if time.monotonic() > deadline:
+                                    fail("section export time limit reached", "export_timeout", 503)
+                                take = min(65536, remaining)
+                                block = audio.readframes(take)
+                                if len(block) != take * CHANNELS * 2:
+                                    fail("source PCM truncated", "stale_source", 409)
+                                sample_hash.update(block)
+                                clip.writeframesraw(block)
+                                remaining -= take
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                wav_sha = self._export_hash(output, deadline)
+                if output.stat().st_size != (b - a) * CHANNELS * 2 + 44:
+                    fail("exported WAV frame count mismatch", "processing_failed", 502)
+                # Recheck immutable inputs after copying before publishing success.
+                self._section_source(pid, root, source_id)
+                if time.monotonic() > deadline:
+                    fail("section export time limit reached", "export_timeout", 503)
+                record = {**claim, "status": "completed", "completed_at": now(),
+                          "claim_sha256": digest(claim), "frames": b - a, "sample_rate": RATE,
+                          "channels": CHANNELS, "sample_width_bytes": 2, "encoding": "pcm_s16le",
+                          "frame_range": "start_inclusive_end_exclusive", "rounding": "nearest_frame_half_up",
+                          "method": "exact_decoded_pcm_frame_copy_v1", "audio_scope": "full_mix_not_isolated_vocals",
+                          "sample_data_sha256": sample_hash.hexdigest(), "manifest_url": base_url + "/manifest",
+                          "files": {"wav": {"relative_path": relative + "/section.wav", "url": base_url + "/wav",
+                                            "sha256": wav_sha, "byte_size": output.stat().st_size}},
+                          "processing": {"gain_db": 0, "fades": False, "source_separation": False},
+                          "listening_confirmed": False, "edit_recipe_created": False}
+                record["record_sha256"] = digest(record)
+                write_new(directory / "manifest.json", record)
+                return record
+            except Exception as exc:
+                write_new(directory / "failure.json", {"export_id": eid, "status": "failed", "failed_at": now(),
+                          "error": str(exc), "evidence_preserved": True})
+                if isinstance(exc, MasterAudioError):
+                    raise
+                fail("section export failed; evidence retained", "processing_failed", 502)
+
+    def section_export_file(self, pid, export_id, kind):
+        if not isinstance(export_id, str) or not re.fullmatch(r"[a-f0-9]{32}", export_id) or kind not in {"wav", "manifest"}:
+            fail("section export not found", "not_found", 404)
+        with self._locked(pid) as root:
+            claim = self._export_claim(root, export_id)
+            source = self._section_source(pid, root, claim.get("source_id"))
+            if claim.get("source_sha256") != source["sha256"] or claim.get("pcm_sha256") != source["pcm_sha256"]:
+                fail("section export source binding invalid", "evidence_invalid", 409)
+            self._export_manifest(root, export_id, claim)
+            return confined(root, f"section-exports/{export_id}/" + ("section.wav" if kind == "wav" else "manifest.json"))
 
     def upload_source(self, pid, filename, payload):
         if (not isinstance(filename, str) or not filename.strip() or len(filename) > 255
