@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production Brief Workspace</title>
+  <link rel="stylesheet" href="/static/app.css?v=14">
+  <style>
+    .pb-wrap { max-width: 1180px; margin: 0 auto; padding: 20px; }
+    .pb-panel { border: 1px solid #ccc; border-radius: 8px; padding: 14px; margin: 14px 0; }
+    .pb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+    .pb-grid label, .pb-field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+    .pb-grid input, .pb-grid select, .pb-field input, .pb-field select, .pb-field textarea, .pb-panel textarea { width: 100%; box-sizing: border-box; }
+    .pb-panel textarea { min-height: 110px; font-family: ui-monospace, Consolas, monospace; }
+    .pb-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .pb-note { color: #555; font-size: 0.92em; }
+    .pb-error { color: #a00000; white-space: pre-wrap; }
+    .pb-ok { color: #176b2c; white-space: pre-wrap; }
+    pre.pb-output { white-space: pre-wrap; word-break: break-word; background: #f6f6f6; padding: 10px; max-height: 420px; overflow: auto; }
+    .pb-revision { border-top: 1px solid #ddd; padding: 8px 0; }
+    .pb-revision code { word-break: break-all; }
+  </style>
+</head>
+<body>
+<main class="pb-wrap">
+  <h1>Production Brief Workspace</h1>
+  <p class="pb-note">Project-scoped intake record. Raw prompt/research is preserved verbatim. Structured fields record origin and status. Saving is not approval; review grants no generation, audio, tool, or legacy music permission.</p>
+
+  <section class="pb-panel">
+    <div class="pb-row">
+      <label>Project ID <input id="project-id" placeholder="12 lowercase hex" size="18"></label>
+      <button id="load-project" type="button">Load project</button>
+      <span class="pb-note">Direct URL: <code>/production-brief?project=&lt;project-id&gt;</code></span>
+    </div>
+    <pre id="status-output" class="pb-output" aria-live="polite">No project loaded.</pre>
+  </section>
+
+  <section class="pb-panel">
+    <h2>Draft inputs</h2>
+    <div class="pb-field"><label>Raw supplied prompt (verbatim)</label><textarea id="raw-prompt"></textarea></div>
+    <div class="pb-field"><label>Raw research (untrusted data, verbatim)</label><textarea id="raw-research"></textarea></div>
+    <div class="pb-field"><label>Draft note</label><input id="draft-note" maxlength="500"></div>
+
+    <div class="pb-grid">
+      <div class="pb-field"><label>Exact supplied lyrics</label><textarea id="lyrics-text"></textarea></div>
+      <div class="pb-field"><label>Lyrics origin</label><select id="lyrics-origin"></select></div>
+    </div>
+    <div class="pb-field">
+      <label>Structured fields — lossless JSON</label>
+      <textarea id="structured-json" spellcheck="false"></textarea>
+      <p class="pb-note">Edit the JSON object for key, tempo_bpm, meter, intended_sections, hard_constraints, asset_references and capabilities. Notes, evidence_refs, numeric types, Unicode, pipes and embedded newlines round-trip exactly. Unsupported fields are rejected, not dropped. Asset IDs use the existing 10-character lowercase hex take-ID contract; 12-character project IDs and 64-character source hashes are different.</p>
+    </div>
+
+    <div class="pb-row">
+      <button id="save-draft" type="button">Save production brief draft</button>
+      <span class="pb-note">A successor draft never inherits review as valid.</span>
+    </div>
+    <p id="dirty-state" class="pb-note" role="status" aria-live="polite"></p>
+    <pre id="draft-output" class="pb-output" aria-live="polite"></pre>
+    <div id="checklist" class="pb-panel"></div>
+  </section>
+
+  <section class="pb-panel">
+    <h2>Saved revisions</h2>
+    <div id="revisions-list"></div>
+    <div class="pb-row">
+      <label>Compare from <input id="compare-from" type="number" min="1" step="1"></label>
+      <label>to <input id="compare-to" type="number" min="1" step="1"></label>
+      <button id="compare-btn" type="button">Compare revisions</button>
+    </div>
+    <pre id="compare-output" class="pb-output" aria-live="polite"></pre>
+  </section>
+
+  <section class="pb-panel">
+    <h2>Explicit review of one exact saved revision</h2>
+    <p class="pb-note">The API records this as a self-asserted operator action. It cannot prove a person listened or clicked, and it grants no generation/audio/tool/music approval.</p>
+    <p id="review-target" class="pb-note">No saved revision loaded for review.</p>
+    <p class="pb-note">Review is blocked while the editor has unsaved changes. The target is the loaded saved revision, not the current editor text.</p>
+    <div class="pb-row">
+      <label>Loaded saved revision <input id="review-revision" type="number" min="1" step="1" readonly></label>
+      <label>Loaded exact content SHA-256 <input id="review-hash" size="68" readonly></label>
+    </div>
+    <div class="pb-field"><label>Review note</label><input id="review-note" maxlength="500"></div>
+    <label><input id="review-confirm" type="checkbox"> I am the operator and I explicitly review this exact saved revision.</label>
+    <div class="pb-row"><button id="review-btn" type="button">Record operator review</button></div>
+    <pre id="review-output" class="pb-output" aria-live="polite"></pre>
+  </section>
+
+  <section class="pb-panel">
+    <h2>Deterministic context assembly</h2>
+    <p class="pb-note">No model or provider is called. Token counts are character-based estimates, not a verified tokenizer. Required material over budget blocks; it is not truncated.</p>
+    <div class="pb-row">
+      <label>Revision <input id="context-revision" type="number" min="1" step="1"></label>
+      <label>Section <input id="context-section" placeholder="optional"></label>
+      <label>Occurrence <input id="context-occurrence" type="number" min="1" step="1" placeholder="optional"></label>
+      <label>Budget tokens <input id="context-budget" type="number" min="256" max="32000" step="1" value="8000"></label>
+      <button id="context-btn" type="button">Assemble context</button>
+    </div>
+    <pre id="context-output" class="pb-output" aria-live="polite"></pre>
+  </section>
+
+  <p id="notice" class="pb-error" role="status" aria-live="polite"></p>
+</main>
+<script type="module" src="/static/production_brief.js?v=2"></script>
+</body>
+</html>
