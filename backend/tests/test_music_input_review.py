@@ -41,6 +41,23 @@ class InputReviewTests(unittest.TestCase):
             "Intro": "Instrumental only; fiddle", "Outro": "No vocals; steel guitar",
         }), [])
 
+    def test_a_repeated_section_with_a_general_directive_is_not_flagged(self):
+        """'gang shout the last word' is about the lyric, not the last chorus."""
+        lyrics = ("[Chorus]\nA line of the song,\n[Verse]\nAnother line here,\n"
+                  "[Chorus]\nA line of the song,\n")
+        issues = review(lyrics=lyrics, arrangement={
+            "Chorus": "Full band, gang shout the last word.",
+            "Verse": "Lighter shuffle."})
+        self.assertEqual([i for i in issues if i["code"] == "shared_occurrence_wording"], [])
+
+    def test_a_repeated_section_that_names_one_occurrence_is_flagged(self):
+        lyrics = ("[Chorus]\nA line of the song,\n[Verse]\nAnother line here,\n"
+                  "[Chorus]\nA line of the song,\n")
+        issues = review(lyrics=lyrics, arrangement={
+            "Chorus": "The final chorus, full band.",
+            "Verse": "Lighter shuffle."})
+        self.assertTrue([i for i in issues if i["code"] == "shared_occurrence_wording"])
+
     def test_empty_verse_and_unqualified_outro_still_warn(self):
         warnings = review(lyrics="[verse]\n[outro]\n")
         self.assertEqual([w["section"] for w in warnings if w["code"] == "empty_section"],

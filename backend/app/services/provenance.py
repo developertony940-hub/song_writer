@@ -40,6 +40,7 @@ PROMPT_SPECS: dict[str, tuple[str, str]] = {
     "video.upscale": ("1.0.0", "Upscale a supplied video using the selected enhancement model and workflow."),
     "audio.synthesize": ("1.0.0", "Synthesize narration from validated voiceover text."),
     "music.generate": ("1.0.0", "Generate a song from versioned lyrics and musical direction using ACE-Step 1.5."),
+    "music.draft_from_prompt": ("1.0.0", "Turn an operator song prompt into a validated, unapproved music draft and production brief."),
     "render.composition": ("1.0.0", "Render a normalized edit decision list using the selected delivery profile."),
     "asset.user_supplied": ("1.0.0", "Persist a user-supplied artifact without implying model generation."),
 }

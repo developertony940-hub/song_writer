@@ -1,0 +1,18 @@
+[
+  {
+    "name": "stjudes",
+    "file": "stjudes.txt",
+    "sha256": "b25e2d7e5241b63effa4af3ae01abc2155e6a9c6f9628de4af6cec8709d09cc4",
+    "chars": 12674,
+    "expect_operator_lyrics": true,
+    "note": "complete blueprint with the operator's lyrics, chords and mix chain"
+  },
+  {
+    "name": "backwoods",
+    "file": "backwoods.txt",
+    "sha256": "f90d5712d5c3dd61645ecb2e87caf4ace015346342aad8161d81a349caea4f73",
+    "chars": 5552,
+    "expect_operator_lyrics": false,
+    "note": "research, chords and a mix chain with no lyric lines; the assistant must write them"
+  }
+]

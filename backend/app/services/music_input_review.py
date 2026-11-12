@@ -33,20 +33,149 @@ def section_family(name: str, known_sections: Iterable[str]) -> str | None:
     return None
 
 
+def canonical_section_name(name: str, known_sections: Iterable[str]) -> str | None:
+    """Map a heading onto the app's section vocabulary, or give up.
+
+    A band chart heading carries an annotation - ``[Verse 1 - Johnny's
+    Party]``, ``[CHORUS - 8 BARS]`` - and the annotation is direction, not
+    part of the section's name. The returned name is the house spelling.
+    """
+    known = tuple(known_sections)
+    head = (name or "").strip().strip("[]").strip()
+    if not head:
+        return None
+    if section_family(head, known) is not None:
+        return _title_section(head)
+    parts = re.split(r"\s*[-–—:]\s+", head, maxsplit=1)
+    if len(parts) == 2 and parts[0].strip() and section_family(parts[0], known) is not None:
+        return _title_section(parts[0].strip())
+    for word in re.split(r"[\s/]+", head):
+        word = word.strip(".,")
+        if word and section_family(word, known) is not None:
+            return _title_section(word)
+    return None
+
+
+def _title_section(name: str) -> str:
+    """The house spelling of a section: Verse 1, Pre-Chorus, Final Chorus."""
+    parts: list[str] = []
+    for part in name.split("-"):
+        if not part.strip():
+            continue
+        words: list[str] = []
+        for index, word in enumerate(part.split(" ")):
+            if not word:
+                continue
+            if index == 0 or word[0].isdigit():
+                words.append(word[:1].upper() + word[1:].lower())
+            else:
+                words.append(word.lower())
+        parts.append(" ".join(words))
+    return "-".join(parts)
+
+
 def _instrumental_only(name: str, arrangement: Mapping[str, str]) -> bool:
     # Intro/outro may contain vocals. Only exempt those when their exact
     # directive explicitly says instrumental-only, rather than guessing from
     # instrument names ("steel guitar" alone does not establish no vocals).
     if name.casefold() in {"inst", "instrumental"}:
         return True
-    directive = arrangement.get(name, "")
-    return bool(re.search(
-        r"\b(?:instrumental(?:[ -]only)?|no (?:vocals|lyrics)|without vocals)\b",
-        directive, re.IGNORECASE,
-    )) and not bool(re.search(
+    directive = arrangement.get(name, "").strip()
+    if not directive:
+        return False
+    # "Instrumental punctuation" or "instrumental fills" describe what happens
+    # inside a sung section; they do not make the section wordless. Only a
+    # directive that calls the passage itself instrumental counts.
+    says_instrumental = bool(
+        re.match(r"^\s*instrumental\b", directive, re.IGNORECASE)
+        or re.search(
+            r"\binstrumental[ -](?:only|breaks?|sections?|solos?|passages?|"
+            r"breakdowns?|figure|figures?)\b", directive, re.IGNORECASE)
+        or re.search(r"\bno (?:vocals|lyrics)\b|\bwithout vocals\b",
+                     directive, re.IGNORECASE))
+    if not says_instrumental:
+        return False
+    return not bool(re.search(
         r"\b(?:not instrumental|non[ -]instrumental|vocals? enter|sung)\b",
         directive, re.IGNORECASE,
     ))
+
+
+def _structure_warnings(
+    lyrics: str, tags: list[tuple[str, int, int]], tag_names: list[str],
+    arrangement: Mapping[str, str],
+) -> list[dict[str, Any]]:
+    """Deterministic structure checks that no model call is needed for.
+
+    These cover the defect classes observed in real draft runs: a shared
+    section name whose directive reads like a single occurrence, a section
+    described as instrumental while it carries words, and a structure with
+    tags but nothing to sing.
+    """
+    warnings: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+    for name in tag_names:
+        counts[name] = counts.get(name, 0) + 1
+    for name, count in counts.items():
+        if count > 1:
+            directive = arrangement.get(name, "")
+            if _OCCURRENCE_WORDS.search(directive):
+                warnings.append({
+                    "code": "shared_occurrence_wording", "section": name,
+                    "message": (
+                        f"[{name}] appears {count} times but its single directive reads "
+                        "like a single occurrence; give the occurrences distinct names "
+                        "if they need different directions"),
+                })
+    for index, (name, _, end) in enumerate(tags):
+        block_end = tags[index + 1][1] if index + 1 < len(tags) else len(lyrics)
+        body = lyrics[end:block_end].strip()
+        if not body:
+            continue
+        directive = arrangement.get(name, "")
+        if _INSTRUMENTAL_CLAIM.search(directive) and not _INSTRUMENTAL_ONLY.search(directive):
+            warnings.append({
+                "code": "instrumental_lyric_conflict", "section": name,
+                "message": (
+                    f"[{name}] is described as instrumental but carries lyric lines; "
+                    "a section with words cannot also be an instrumental passage"),
+            })
+    if tag_names and not _any_sung_line(lyrics, tags):
+        warnings.append({
+            "code": "no_sung_lines",
+            "message": (
+                "the lyrics contain section tags but no singable lines; every "
+                "non-instrumental section needs lyric text"),
+        })
+    return warnings
+
+
+_OCCURRENCE_WORDS = re.compile(
+    r"\b(?:final|last|first|second|third|opening|closing)\s+"
+    r"(?:chorus|verses?|intros?|outros?|bridges?|solos?|pre-?chorus|breaks?|"
+    r"instruments?|parts?|hooks?)\b"
+    r"|\b(?:the\s+)?(?:first|last)\s+time\b"
+    r"|\brepeat\s+(?:the\s+|this\s+|that\s+)?"
+    r"(?:chorus|verses?|intros?|outros?|bridges?|hooks?|parts?)\b",
+    re.IGNORECASE)
+_INSTRUMENTAL_CLAIM = re.compile(
+    r"\b(?:instrumental(?:[ -]only)?|solo|no vocals|without vocals)\b", re.IGNORECASE)
+_INSTRUMENTAL_ONLY = re.compile(
+    r"\b(?:not instrumental|non[ -]instrumental|vocals? enter|sung)\b", re.IGNORECASE)
+
+
+def _any_sung_line(lyrics: str, tags: list[tuple[str, int, int]]) -> bool:
+    """True when at least one non-instrumental section carries a sung line."""
+    for index, (_, _, end) in enumerate(tags):
+        block_end = tags[index + 1][1] if index + 1 < len(tags) else len(lyrics)
+        for line in lyrics[end:block_end].splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("("):
+                continue
+            if stripped.startswith("[") and stripped.endswith("]"):
+                continue
+            return True
+    return False
 
 
 def review_music_inputs(
@@ -78,6 +207,7 @@ def review_music_inputs(
                 "code": "arrangement_orphan", "section": section,
                 "message": f"arrangement directive for [{section}] has no matching section tag",
             })
+    warnings.extend(_structure_warnings(lyrics, tags, tag_names, arrangement))
     for line_number, line in enumerate(lyrics.splitlines(), 1):
         # Bare headers are ambiguous; warn, never silently transform lyrics.
         if line.strip() and section_family(line.strip(), known_sections) is not None:

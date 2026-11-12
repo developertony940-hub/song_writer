@@ -28,7 +28,17 @@ async function api(path, opts = {}) {
       try {
         const data = await res.json();
         detail = data.detail || detail;
-        if (detail && typeof detail === "object") detail = detail.detail || JSON.stringify(detail);
+        if (Array.isArray(detail)) {
+          // A validation error list: show what was wrong, never the echoed input.
+          detail = detail.map((e) => {
+            const loc = Array.isArray(e.loc) ? e.loc.filter((x) => x !== "body").join(".") : "";
+            const msg = e.msg || e.type || "invalid value";
+            return loc ? `${loc}: ${msg}` : msg;
+          }).join(" | ");
+        } else if (detail && typeof detail === "object") {
+          detail = detail.detail || detail.message || JSON.stringify(detail);
+        }
+        if (data && Array.isArray(data.issues)) detail = `${detail} :: ${data.issues.join(" | ")}`;
       } catch {}
       throw new Error(String(detail));
     }
@@ -746,10 +756,193 @@ async function populateModelDropdown() {
   }
 }
 
+// ---------- music prompt assistant ----------
+// Preference order measured on the same southern-gothic brief. Reliability
+// matters most: the qwen3.6/qwen3.8 and deepseek-r1 builds are reasoning
+// models that return empty content once their token budget goes to hidden
+// thinking, so they are demoted instead of trusted. magnum and gemma wrote
+// the strongest drafts of the models that reliably return JSON.
+const MUSIC_PROMPT_MODEL_PREFERENCE = [
+  "magnum-v4-72b", "gemma-4-31b", "llama-3.3-70b-instruct",
+  "mistral-small-3.1-24b-instruct", "strawberrylemonade",
+];
+const MUSIC_PROMPT_REASONING_MODEL = /qwen3\.[68]|deepseek-r1/i;
+async function populateMusicPromptModels() {
+  const sel = document.getElementById("music-prompt-model");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  try {
+    const r = await fetch(API + "/runtime/lmstudio/models");
+    if (!r.ok) throw new Error(r.statusText);
+    const data = await r.json();
+    const models = data.models || [];
+    for (const m of models) {
+      const opt = document.createElement("option");
+      opt.value = m;
+      opt.textContent = MUSIC_PROMPT_REASONING_MODEL.test(m)
+        ? `${m} - reasoning model, may return empty`
+        : m;
+      sel.append(opt);
+    }
+    if (!models.length) {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "LM Studio offline: no models loaded";
+      sel.append(opt);
+      return;
+    }
+    // A general instruct model writes better lyrics than a code model, so
+    // prefer one; the operator can always override the selection.
+    const preferred = MUSIC_PROMPT_MODEL_PREFERENCE
+      .map((name) => models.find((m) => m.toLowerCase().includes(name)))
+      .find(Boolean);
+    if (preferred) sel.value = preferred;
+    else {
+      const general = models.find((m) => !/embed|coder|tts|whisper|clip/i.test(m)
+        && !MUSIC_PROMPT_REASONING_MODEL.test(m));
+      sel.value = general || models[0];
+    }
+    if (prev && models.includes(prev)) sel.value = prev;
+  } catch (e) {
+    sel.innerHTML = "";
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "LM Studio offline: " + e.message;
+    sel.append(opt);
+  }
+}
+document.getElementById("music-prompt-btn").addEventListener("click", disabledWhile(
+  document.getElementById("music-prompt-btn"),
+  async () => {
+    const status = document.getElementById("music-prompt-status");
+    if (!currentProject) {
+      status.textContent = "Open a project first.";
+      status.className = "err";
+      return;
+    }
+    const prompt = document.getElementById("music-prompt").value.trim();
+    if (prompt.length < 8) {
+      status.textContent = "Paste your song prompt first.";
+      status.className = "err";
+      return;
+    }
+    const model = document.getElementById("music-prompt-model").value || null;
+    status.textContent = "The assistant is drafting from your prompt. A long brief can take a while.";
+    status.className = "muted";
+    let result;
+    try {
+      result = await api(`/music/${currentProject.id}/draft-from-prompt`, {
+        method: "PUT",
+        body: JSON.stringify({ project_id: currentProject.id, prompt, model }),
+        timeout: 1800000,
+      });
+    } catch (e) {
+      status.textContent = `Draft failed: ${e.message}`;
+      status.className = "err";
+      throw e;
+    }
+    fillMusicForm(result.settings);
+    await refreshMusic();
+    const filled = result.filled || [];
+    const issues = result.preflight || [];
+    const usage = result.usage;
+    status.textContent = [
+      `Draft v${result.draft?.version} created from "${result.title}" using ${result.model}.`,
+      usage && usage.calls
+        ? `Cost: ${usage.tokens_in} in + ${usage.tokens_out} out tokens over ${usage.calls} call(s), ${(usage.elapsed_ms / 1000).toFixed(1)}s.`
+        : "",
+      filled.length ? `Filled in: ${filled.join("; ")}` : "",
+      issues.length ? `Preflight: ${issues.map((i) => i.message).join(" | ")}` : "Preflight: no issues.",
+      `Production brief: ${result.artifact?.filename}.`,
+      "Review the lyrics and arrangement below, then Approve lyrics/settings to allow generation.",
+    ].filter(Boolean).join(" ");
+    status.className = issues.length ? "err" : "muted";
+    toast("Draft created from prompt");
+  }
+));
+
+document.getElementById("music-agents-btn").addEventListener("click", disabledWhile(
+  document.getElementById("music-agents-btn"),
+  async () => {
+    const status = document.getElementById("music-agents-status");
+    if (!currentProject) {
+      status.textContent = "Open a project first.";
+      status.className = "err";
+      return;
+    }
+    const prompt = document.getElementById("music-prompt").value.trim();
+    if (prompt.length < 8) {
+      status.textContent = "Paste your song prompt first.";
+      status.className = "err";
+      return;
+    }
+    const model = document.getElementById("music-prompt-model").value || null;
+    status.textContent = "The agent pipeline is running. It picks its own mode from the brief.";
+    status.className = "muted";
+    let result;
+    try {
+      result = await api(`/music/${currentProject.id}/agents/draft`, {
+        method: "PUT",
+        body: JSON.stringify({ project_id: currentProject.id, prompt, model }),
+        timeout: 1800000,
+      });
+    } catch (e) {
+      status.textContent = `Agent run failed: ${e.message}`;
+      status.className = "err";
+      throw e;
+    }
+    await refreshMusic();
+    const usage = result.usage || {};
+    const defects = result.defects || [];
+    status.textContent = [
+      `Run ${result.run_id} ${result.status} in ${result.mode} mode using ${result.model}.`,
+      usage.calls ? `Cost: ${usage.tokens_in} in + ${usage.tokens_out} out tokens over ${usage.calls} call(s), ${(usage.elapsed_ms / 1000).toFixed(1)}s.` : "",
+      defects.length ? `Defects: ${defects.map((d) => d.code).join(", ")}` : "Defects: none.",
+      (result.notes || []).join(" "),
+      result.status === "saved"
+        ? "Review the draft below, then Approve lyrics/settings to allow generation."
+        : "No draft was written.",
+    ].filter(Boolean).join(" ");
+    status.className = result.status === "saved" ? "muted" : "err";
+    toast(`Agent run ${result.status}`);
+  }
+));
+
+document.getElementById("music-retro-btn").addEventListener("click", disabledWhile(
+  document.getElementById("music-retro-btn"),
+  async () => {
+    const panel = document.getElementById("music-agents-panel");
+    if (!currentProject) { panel.textContent = "Open a project first."; return; }
+    const report = await api(`/music/${currentProject.id}/agents/retro`);
+    const defects = Object.entries(report.defects || {})
+      .map(([code, count]) => `${code} x${count}`).join(", ");
+    panel.textContent = [
+      `Runs ${report.runs} | tokens ${report.total_tokens} | human edits ${report.human_edit_count}`,
+      `stored critiques ${report.stored_critiques}`,
+      defects ? `defects: ${defects}` : "defects: none",
+      report.adoption_note,
+    ].filter(Boolean).join(" | ");
+  }
+));
+
+document.getElementById("music-takes-btn").addEventListener("click", disabledWhile(
+  document.getElementById("music-takes-btn"),
+  async () => {
+    const panel = document.getElementById("music-agents-panel");
+    if (!currentProject) { panel.textContent = "Open a project first."; return; }
+    const ranking = await api(`/music/${currentProject.id}/agents/takes/ranking`);
+    panel.textContent = ranking.status === "insufficient_labels"
+      ? `Take ranking withheld: ${ranking.note}`
+      : `Take ranking: ${ranking.ranked.join(" > ")}${ranking.preferred ? ` (preferred: ${ranking.preferred})` : ""}`;
+  }
+));
+
 // ---------- init ----------
 (async () => {
   await refreshStatus();
   await populateModelDropdown();
+  await populateMusicPromptModels();
   populateMusicKeys();
   await loadProjects();
 })();

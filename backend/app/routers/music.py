@@ -6,13 +6,25 @@ process-scoped music authorization hold is enabled.
 """
 from __future__ import annotations
 
+import json
+import logging
+from pathlib import Path
+
+import httpx
 from fastapi import APIRouter, HTTPException, Response
 
+from app.agents.golden_set import verify_set
+from app.agents.pipeline import get_agent_pipeline
+from app.agents.records import read_run_records, summarise_run_records
+from app.agents.retro import build_report
+from app.agents.runtime import AgentBudgetExhausted
+from app.agents.take_selector import collect_candidates, rank_takes
 from app.models.music import (
     MusicApproveRequest,
     MusicAudioApproveRequest,
     MusicCancelRequest,
     MusicCritiqueRequest,
+    MusicDraftFromPromptRequest,
     MusicDraftRequest,
     MusicGenerateRequest,
     MusicPreferTakeRequest,
@@ -21,11 +33,16 @@ from app.models.music import (
     MusicRepaintCapacityProposalRequest,
     MusicRepaintProposalRequest,
     MusicRepaintRecoverRequest,
+    MusicSubmissionCapRequest,
     MusicRepaintRejectRequest,
     MusicRepaintReviseRequest,
     MusicSectionBoundaryRequest,
     MusicVariantPromoteRequest,
     MusicVariantRequest,
+)
+from app.services.lmstudio_client import LMStudioModelUnavailable
+from app.services.music_draft_service import (
+    MusicDraftGenerationError, get_music_draft_service,
 )
 from app.services.take_export_service import TakeExportError, get_take_export_service
 from app.services.music_service import (
@@ -39,6 +56,8 @@ from app.services.music_service import (
     MusicRuntimeUnavailable,
     get_music_service,
 )
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/music", tags=["music"])
 
@@ -92,12 +111,154 @@ def save_draft(pid: str, req: MusicDraftRequest):
         raise _error(exc)
 
 
+def _assistant_unreachable(exc: Exception) -> HTTPException:
+    """Name the failure, because the exception's own message can be empty."""
+    detail = str(exc).strip()
+    kind = type(exc).__name__
+    if not detail:
+        detail = f"the request failed with {kind} and no further detail"
+    else:
+        detail = f"{kind}: {detail}"
+    return HTTPException(502, f"the assistant service is unreachable - {detail}")
+
+
+@router.put("/{pid}/draft-from-prompt")
+async def draft_from_prompt(pid: str, req: MusicDraftFromPromptRequest):
+    """Turn an operator prompt into a validated, unapproved draft.
+
+    The assistant fills in whatever the prompt leaves out. Nothing is approved
+    and nothing is generated here: the result still needs a human approval of
+    the exact lyrics/settings hashes.
+    """
+    _check_project(pid, req.project_id)
+    try:
+        return await get_music_draft_service().generate(pid, req.prompt, model=req.model)
+    except MusicDraftGenerationError as exc:
+        raise HTTPException(422, {"detail": str(exc), "issues": exc.issues})
+    except LMStudioModelUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    except httpx.HTTPError as exc:
+        raise _assistant_unreachable(exc)
+    except (KeyError, MusicError) as exc:
+        raise _error(exc)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a 502 with the reason
+        log.exception("music draft generation failed")
+        raise HTTPException(502, f"draft generation failed: {exc}")
+
+
+@router.put("/{pid}/agents/draft")
+async def agents_draft(pid: str, req: MusicDraftFromPromptRequest):
+    """Run the bounded agent pipeline and save at most one unapproved draft.
+
+    The pipeline picks its own mode from the brief: a brief that already
+    carries lyrics and a chord map takes the fast path, anything else is
+    decomposed into narrow producers. Approval, the submission cap and audio
+    approval are unreachable from here.
+    """
+    _check_project(pid, req.project_id)
+    try:
+        result = await get_agent_pipeline().run(pid, req.prompt, model=req.model)
+        return result.model_dump(mode="json")
+    except LMStudioModelUnavailable as exc:
+        raise HTTPException(503, str(exc))
+    except httpx.HTTPError as exc:
+        raise _assistant_unreachable(exc)
+    except (KeyError, MusicError) as exc:
+        raise _error(exc)
+    except AgentBudgetExhausted as exc:
+        raise HTTPException(409, f"the agent run exceeded its budget: {exc}")
+    except Exception as exc:  # noqa: BLE001 - surfaced as a 502 with the reason
+        log.exception("agent pipeline run failed")
+        raise HTTPException(502, f"the agent pipeline failed: {exc}")
+
+
+@router.get("/{pid}/agents/runs")
+def agents_runs(pid: str, limit: int = 50):
+    """The agent run ledger: what was called, what it cost, what happened."""
+    try:
+        service = get_music_service()
+        state_dir = service._state_dir(pid)
+    except KeyError as exc:
+        raise _error(exc)
+    rows = read_run_records(state_dir)[-max(1, min(limit, 200)):]
+    return {"runs": rows, "summary": summarise_run_records(rows)}
+
+
+@router.get("/{pid}/agents/retro")
+def agents_retro(pid: str):
+    """The retro report. Read-only: it never changes a policy."""
+    try:
+        service = get_music_service()
+        state_dir = service._state_dir(pid)
+    except KeyError as exc:
+        raise _error(exc)
+    return build_report(pid, state_dir, root=Path(service.store.root))
+
+
+@router.get("/{pid}/agents/takes/ranking")
+async def agents_take_ranking(pid: str):
+    """Rank completed takes. Advisory, and gated until enough labels exist."""
+    try:
+        service = get_music_service()
+        status = await service.status(pid)
+    except (KeyError, MusicError) as exc:
+        raise _error(exc)
+    state = service._load_state(pid)
+    preferred = state.preferred_take.asset_id if state.preferred_take else None
+    candidates = collect_candidates(status.get("takes") or [], preferred_asset_id=preferred)
+    requested = None
+    if state.draft is not None:
+        requested = state.draft.settings.duration_s
+    label_count = _preferred_take_count(pid)
+    ranking = rank_takes(candidates, requested_duration_s=requested,
+                         label_count=label_count)
+    return ranking.model_dump(mode="json")
+
+
+@router.get("/{pid}/agents/golden")
+def agents_golden():
+    """The golden set used to evaluate a policy change, and its health."""
+    report = verify_set()
+    return {"briefs": report, "count": len(report),
+            "adoption_threshold": 20}
+
+
+def _preferred_take_count(pid: str) -> int:
+    """How many preferred-take records exist across the workspace."""
+    root = Path(get_music_service().store.root)
+    total = 0
+    for state_path in root.glob("*/music/.state/state.json"):
+        try:
+            data = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 - a damaged file is simply not a label
+            continue
+        if data.get("preferred_take"):
+            total += 1
+    return total
+
+
 @router.post("/{pid}/approve")
 def approve(pid: str, req: MusicApproveRequest):
     _check_project(pid, req.project_id)
     try:
         return get_music_service().approve(
             pid, req.note, req.submission_cap, req.variant_plan)
+    except (KeyError, MusicError) as exc:
+        raise _error(exc)
+
+
+@router.put("/{pid}/submission-cap")
+def set_submission_cap(pid: str, req: MusicSubmissionCapRequest):
+    """Set the project's total submission budget.
+
+    This is the only way to raise it. Approving a draft can never raise
+    the project's budget; that stays a separate, explicit operator action
+    with a note, bounded by the configured maximum.
+    """
+    _check_project(pid, req.project_id)
+    try:
+        return get_music_service().set_submission_cap(
+            pid, req.submission_cap, req.note)
     except (KeyError, MusicError) as exc:
         raise _error(exc)
 

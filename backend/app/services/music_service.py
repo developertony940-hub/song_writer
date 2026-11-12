@@ -325,6 +325,13 @@ class MusicService:
             raise MusicConflict("music attempt journal contains inconsistent rows")
         orphans = sorted(attempt_id for attempt_id in started if attempt_id not in terminal)
         open_uncertain = sorted(attempt_id for attempt_id in uncertain if attempt_id not in recovered)
+        completed_attempts = {
+            row["attempt_id"] for row in rows
+            if row.get("kind") == "attempt_completed"
+        }
+        attempted_labels = {
+            row["plan_label"] for row in started.values() if row.get("plan_label")
+        }
         return {
             "rows": rows,
             "submissions": len(started),
@@ -334,8 +341,16 @@ class MusicService:
             "orphans": orphans,
             "open_uncertain": open_uncertain,
             "attempt_ids": sorted(started),
+            # A plan entry runs once, but only if it actually produced a take.
+            # An attempt that was rejected before it rendered leaves the entry
+            # available, so a transient failure does not consume the take.
             "plan_labels": sorted(
-                {row["plan_label"] for row in started.values() if row.get("plan_label")}),
+                label for label in attempted_labels
+                if any(
+                    row.get("plan_label") == label and attempt_id in completed_attempts
+                    for attempt_id, row in started.items()
+                )),
+            "attempted_plan_labels": sorted(attempted_labels),
         }
 
     def _effective_cap(self, state: MusicState) -> int | None:
@@ -474,6 +489,47 @@ class MusicService:
         result["revision_created"] = revision_created
         return result
 
+    def set_submission_cap(self, pid: str, submission_cap: int, note: str) -> dict[str, Any]:
+        """Set the project's total submission budget.
+
+        Approving a draft can never raise this: an approval authorises
+        renders for one draft, not a new budget. Raising the project's
+        budget is a separate, explicit operator action that has to carry a
+        note, and it can never go above the configured ceiling.
+        """
+        settings = get_settings()
+        if not note.strip():
+            raise MusicConflict("a note is required to change the submission cap")
+        if submission_cap > settings.music.max_submission_cap:
+            raise MusicConflict(
+                f"submission cap exceeds configured maximum "
+                f"({settings.music.max_submission_cap})")
+        state = self._load_state(pid)
+        journal = self._journal_state(pid)
+        used = int(journal.get("submissions") or 0)
+        if submission_cap < used:
+            raise MusicConflict(
+                f"the submission cap cannot be set below the {used} submission(s) "
+                "already made")
+        previous = state.lifetime_cap
+        state.lifetime_cap = submission_cap
+        self._save_state(pid, state)
+        return {
+            "project_id": pid,
+            "previous_cap": previous,
+            "lifetime_cap": submission_cap,
+            "submissions_used": used,
+            "cap_remaining": submission_cap - used,
+            "note": note.strip(),
+            "effective_cap": self._effective_cap(state),
+            "next_action": (
+                "approve the current draft with this submission_cap to apply it "
+                "to the draft you are working on"
+                if state.approval is not None
+                and state.approval.submission_cap != submission_cap
+                else "the current approval already carries this cap"),
+        }
+
     def approve(
         self,
         pid: str,
@@ -501,10 +557,8 @@ class MusicService:
         if state.lifetime_cap is not None and submission_cap > state.lifetime_cap:
             raise MusicConflict(
                 f"lifetime cap cannot be increased beyond {state.lifetime_cap}")
-        state.lifetime_cap = (
-            submission_cap if state.lifetime_cap is None
-            else min(state.lifetime_cap, submission_cap)
-        )
+        if state.lifetime_cap is None:
+            state.lifetime_cap = submission_cap
         state.approval = MusicApprovalRecord(
             draft_version=state.draft.version,
             lyrics_sha256=lyrics_sha,
@@ -755,6 +809,8 @@ class MusicService:
 
     # --- generation --------------------------------------------------
     def _patches(self, pid: str, attempt_id: str, settings: MusicSettings) -> dict[str, dict[str, Any]]:
+        from app.services.music_draft_service import coerce_language
+
         lyrics = _normalize_lyrics(settings.lyrics)
         node3: dict[str, Any] = {
             "tags": _effective_tags(settings),
@@ -763,7 +819,9 @@ class MusicService:
             "bpm": settings.bpm,
             "duration": settings.duration_s,
             "timesignature": settings.time_signature,
-            "language": settings.language,
+            # The engine rejects a language it does not know with HTTP 400,
+            # so the value is checked here rather than trusted.
+            "language": coerce_language(settings.language) or "en",
             "keyscale": settings.key_scale,
             "generate_audio_codes": settings.generate_audio_codes,
         }

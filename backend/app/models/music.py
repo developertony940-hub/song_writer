@@ -76,11 +76,30 @@ class MusicDraftRequest(BaseModel):
     revision_name: str | None = Field(None, min_length=1, max_length=60)
 
 
+class MusicDraftFromPromptRequest(BaseModel):
+    """Operator prompt that the local assistant turns into a validated draft."""
+
+    project_id: str
+    # An operator's paste is often a whole working conversation: a blueprint,
+    # several drafts of the lyrics and the notes around them. The limit is
+    # on the request, not on the idea.
+    prompt: str = Field(..., min_length=8, max_length=200000)
+    model: str | None = Field(None, min_length=1, max_length=200)
+
+
 class MusicApproveRequest(BaseModel):
     project_id: str
     note: str = Field(..., min_length=1, max_length=500)
-    submission_cap: int = Field(..., ge=1, le=4)
+    submission_cap: int = Field(..., ge=1, le=100)
     variant_plan: list["MusicVariantPlanItem"] = Field(default_factory=list, max_length=4)
+
+
+class MusicSubmissionCapRequest(BaseModel):
+    """An explicit, noted change to the project's total submission budget."""
+
+    project_id: str
+    submission_cap: int = Field(..., ge=1, le=100)
+    note: str = Field(..., min_length=1, max_length=500)
 
 
 class MusicGenerateRequest(BaseModel):
@@ -251,7 +270,7 @@ class MusicRevisionRecord(BaseModel):
     version: int
     name: str = Field("", max_length=60)
     parent_version: int | None = None
-    source: Literal["draft", "promote", "restore", "repaint"] = "draft"
+    source: Literal["draft", "promote", "restore", "repaint", "prompt_draft"] = "draft"
     settings: MusicSettings
     lyrics_sha256: str
     settings_sha256: str
