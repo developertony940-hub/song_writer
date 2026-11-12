@@ -8,6 +8,7 @@ port = 8000
 # This bundled default resolves relative paths from the repository root. A TOML
 # selected with LOCALAI_CONFIG instead resolves relative paths from its own directory.
 projects_root = "projects"
+profiles_root = "profiles"
 
 [runtime.lmstudio]
 base_url = "http://127.0.0.1:1234/v1"

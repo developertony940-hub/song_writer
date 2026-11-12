@@ -95,7 +95,7 @@ class OperatorLyrics:
 
     @property
     def line_count(self) -> int:
-        return len(self.lines)
+        return sum(1 for line in self.lines if line)
 
 
 def _known_sections() -> tuple[str, ...]:
@@ -208,9 +208,17 @@ class _Document:
         if self._open is not None:
             self._open[1].append(line)
 
+    def add_blank(self) -> None:
+        """Keep one internal stanza break; edges are trimmed later."""
+        if self._open is None:
+            return
+        lines = self._open[1]
+        if lines and lines[-1] != "":
+            lines.append("")
+
     @property
     def lines(self) -> list[str]:
-        return [line for _, lines in self.occurrences for line in lines]
+        return [line for _, lines in self.occurrences for line in lines if line]
 
     @property
     def sections_with_lines(self) -> int:
@@ -251,6 +259,8 @@ def extract_operator_lyrics(source: str) -> OperatorLyrics:
     for raw in text.split("\n"):
         line = raw.strip()
         if not line:
+            if current is not None:
+                current_doc.add_blank()
             continue
         if _BULLET.match(line):
             # A list item is never a sung line.
@@ -317,7 +327,11 @@ def extract_operator_lyrics(source: str) -> OperatorLyrics:
     ))
     collected: list[str] = []
     for tag, lines in best.occurrences:
-        lines = [line for line in lines if line]
+        lines = list(lines)
+        while lines and not lines[0]:
+            lines.pop(0)
+        while lines and not lines[-1]:
+            lines.pop()
         if not lines:
             continue
         if tag not in result.tags:
@@ -336,7 +350,7 @@ def extract_operator_lyrics(source: str) -> OperatorLyrics:
         result.notes.append(
             f"the paste carried {len(documents)} copies of sectioned material; the "
             "most complete copy was claimed and the others were left alone")
-    result.lines = collected
+    result.lines = [line for line in collected if line]
     result.lyrics = "\n".join(collected)
     result.found = True
     # "clean" means the structure is confidently identified: more than one
@@ -438,12 +452,22 @@ def merge_operator_lyrics(
         consumed.add(match)
         pointer = match + 1
         op_tag, op_lines = operator_order[match]
-        merged.append((op_tag, list(op_lines)))
+        op_lines = list(op_lines)
+        while op_lines and not op_lines[0]:
+            op_lines.pop(0)
+        while op_lines and not op_lines[-1]:
+            op_lines.pop()
+        merged.append((op_tag, op_lines))
         replaced.append(op_tag)
     for index, (op_tag, op_lines) in enumerate(operator_order):
         if index in consumed:
             continue
-        merged.append((op_tag, list(op_lines)))
+        op_lines = list(op_lines)
+        while op_lines and not op_lines[0]:
+            op_lines.pop(0)
+        while op_lines and not op_lines[-1]:
+            op_lines.pop()
+        merged.append((op_tag, op_lines))
         added.append(op_tag)
     blocks = []
     for tag, lines in merged:

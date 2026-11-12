@@ -25,5 +25,5 @@ test('save and export have distinct frontend gates and nearby feedback',()=>{
  assert.match(js,/validate\(state.sections,state.data.sources\);if\(!confirm/);
  assert.match(js,/rendered\|\|pending>0/);assert.match(js,/inspectorPending\(\)\)throw Error\('Unapplied/);
  for(const id of ['save-state','save-feedback','inspector-feedback'])assert.match(html,new RegExp(`id="${id}"`));
- assert.match(js,/DRAFT \/ REVIEW PENDING/);assert.match(html,/mastering.js\?v=draftsave1/);
+ assert.match(js,/DRAFT \/ REVIEW PENDING/);assert.match(html,/mastering.js\?v=opcontract1/);
 });

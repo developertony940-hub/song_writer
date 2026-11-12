@@ -71,8 +71,11 @@ class ValidationTests(unittest.TestCase):
         value.update(changes)
         return value
 
-    def revision(self, sections=None, expected=0):
-        return self.service.create_revision(PID, {"expected_revision": expected, "sections": sections or [self.clip()]})
+    def revision(self, sections=None, expected=0, declaration=None):
+        body = {"expected_revision": expected, "sections": sections or [self.clip()]}
+        if declaration is not None:
+            body["declaration"] = declaration
+        return self.service.create_revision(PID, body)
 
     def assert_code(self, code, function, *args):
         with self.assertRaises(MasterAudioError) as raised:
@@ -95,11 +98,18 @@ class ValidationTests(unittest.TestCase):
         self.assertEqual(path.read_bytes(), self.original.read_bytes())
 
     def test_append_only_chain_and_reorder_split(self):
-        first = self.revision()
-        before = (self.project / "master-audio/revisions/000001.json").read_bytes()
         second = self.clip(clip_id="last", start_s=0.5, end_s=1,
                            confirmation={"confirmed": True, "source_sha256": self.sid, "start_s": 0.5, "end_s": 1})
-        latest = self.revision([second, self.clip()], expected=1)
+        first = self.revision([self.clip(), second])
+        before = (self.project / "master-audio/revisions/000001.json").read_bytes()
+        reordered = [second, self.clip()]
+        with self.assertRaises(MasterAudioError) as undeclared:
+            self.revision(reordered, expected=1)
+        self.assertEqual("operation_required", undeclared.exception.code)
+        declaration = {"base_revision": 1, "base_recipe_sha256": first["recipe_sha256"],
+                       "delta_s": 0.0, "final_order": ["last", "verse"],
+                       "actions": [{"kind": "reorder", "clip_id": "last", "to_index": 0}]}
+        latest = self.revision(reordered, expected=1, declaration=declaration)
         self.assertEqual(first["recipe_sha256"], latest["parent_recipe_sha256"])
         self.assertEqual(["last", "verse"], [c["clip_id"] for c in latest["sections"]])
         self.assertEqual(before, (self.project / "master-audio/revisions/000001.json").read_bytes())
@@ -142,7 +152,12 @@ class ValidationTests(unittest.TestCase):
         original = path.read_bytes()
         clip = self.clip(clip_id="draft")
         clip["confirmation"]["confirmed"] = False
-        second = self.revision([self.clip(), clip], expected=1)
+        declaration = {"base_revision": 1, "base_recipe_sha256": first["recipe_sha256"],
+                       "delta_s": 0.5, "final_order": ["verse", "draft"],
+                       "actions": [{"kind": "insert", "clip_id": "draft",
+                                    "placement": "append", "anchor_clip_id": None,
+                                    "delta_s": 0.5}]}
+        second = self.revision([self.clip(), clip], expected=1, declaration=declaration)
         self.assertEqual(original, path.read_bytes())
         self.assertEqual(first["recipe_sha256"], second["parent_recipe_sha256"])
         self.assertEqual([True, False], [c["confirmation"]["confirmed"] for c in second["sections"]])
@@ -153,10 +168,13 @@ class ValidationTests(unittest.TestCase):
     def test_confirming_draft_creates_new_revision_without_mutating_saved_draft(self):
         clip = self.clip()
         clip["confirmation"]["confirmed"] = False
-        self.revision([clip])
+        first = self.revision([clip])
         path = self.project / "master-audio/revisions/000001.json"
         original = path.read_bytes()
-        second = self.revision(expected=1)
+        declaration = {"base_revision": 1, "base_recipe_sha256": first["recipe_sha256"],
+                       "delta_s": 0.0, "final_order": ["verse"],
+                       "actions": [{"kind": "replace", "clip_id": "verse", "delta_s": 0.0}]}
+        second = self.revision(expected=1, declaration=declaration)
         self.assertTrue(second["sections"][0]["confirmation"]["confirmed"])
         self.assertIsNotNone(second["sections"][0]["confirmation"]["clip_sha256"])
         self.assertEqual(original, path.read_bytes())
@@ -288,13 +306,16 @@ except MasterAudioError as e: print(e.code)
         self.assert_code("render_claimed", self.service.render, PID, {"expected_revision": 1, "render_id": "retry"})
 
     def test_claim_without_result_blocks_same_revision_and_id(self):
-        self.revision()
+        first = self.revision()
         directory = self.project / "master-audio/renders/interrupted"
         directory.mkdir()
         write_new(directory / "claim.json", {"render_id": "interrupted", "revision": 1})
         self.assertEqual("uncertain", self.service.status(PID)["renders"][0]["status"])
         self.assert_code("render_claimed", self.service.render, PID, {"expected_revision": 1, "render_id": "other"})
-        self.revision(expected=1)
+        declaration = {"base_revision": 1, "base_recipe_sha256": first["recipe_sha256"],
+                       "delta_s": 0.0, "final_order": ["verse"],
+                       "actions": [{"kind": "replace", "clip_id": "verse", "delta_s": 0.0}]}
+        self.revision(expected=1, declaration=declaration)
         self.assert_code("render_claimed", self.service.render, PID, {"expected_revision": 2, "render_id": "interrupted"})
 
     def test_source_changed_after_revision_cannot_render(self):

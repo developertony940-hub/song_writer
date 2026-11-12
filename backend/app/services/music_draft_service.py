@@ -833,7 +833,11 @@ class MusicDraftService:
     async def generate(self, pid: str, prompt: str, *, model: str | None = None) -> dict[str, Any]:
         from app.config import get_settings
 
-        source = (prompt or "").strip()
+        # The operator paste is untrusted text: strip control bytes and code
+        # fences before it is used for lyric extraction or persisted in
+        # provenance. The pipeline already does this; the draft service must
+        # not be the weaker path.
+        source = sanitize_brief((prompt or "").strip())
         if len(source) < 8:
             raise MusicDraftGenerationError(["the prompt is too short to work with"])
         cfg = get_settings()

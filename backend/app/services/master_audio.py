@@ -6,6 +6,7 @@ is involved. See docs/MASTER-AUDIO.md for the persistence and threat model.
 """
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
@@ -933,20 +934,190 @@ class MasterAudioService:
             fail("master duration limit exceeded")
         return result, sources, total
 
+    @staticmethod
+    def _comparable_clip(clip):
+        confirmation = clip.get("confirmation") or {}
+        return {
+            "source_id": clip["source_id"],
+            "start_s": clip["start_s"],
+            "end_s": clip["end_s"],
+            "start_frame": clip.get("start_frame"),
+            "end_frame": clip.get("end_frame"),
+            "gain_db": clip["gain_db"],
+            "fade_in_s": clip["fade_in_s"],
+            "fade_out_s": clip["fade_out_s"],
+            "label": clip.get("label", ""),
+            "confirmed": confirmation.get("confirmed") is True,
+            "confirmation_sha256": confirmation.get("clip_sha256"),
+        }
+
+    def _validate_declaration(self, rows, sections, duration, declaration):
+        """Validate one explicit declaration against the persisted base.
+
+        The declaration is mandatory for every non-initial revision. It binds
+        the base revision and recipe, lists every structural action, and must
+        reproduce the submitted section list exactly: same order, same
+        untouched clips (including their confirmed clip hash), and an additive
+        duration delta equal to the sum of the declared action deltas.
+        """
+        keys(declaration, {"base_revision", "base_recipe_sha256", "delta_s", "final_order", "actions"},
+             {"base_revision", "base_recipe_sha256", "delta_s", "final_order", "actions"})
+        if (isinstance(declaration["base_revision"], bool)
+                or not isinstance(declaration["base_revision"], int)
+                or declaration["base_revision"] != len(rows)
+                or declaration["base_recipe_sha256"] != rows[-1]["recipe_sha256"]):
+            fail("declaration base revision or recipe is stale", "revision_conflict", 409)
+        delta = declaration["delta_s"]
+        if isinstance(delta, bool) or not isinstance(delta, (int, float)) or not math.isfinite(delta):
+            fail("declaration delta_s must be a finite number")
+        actions = declaration["actions"]
+        if not isinstance(actions, list) or not actions:
+            fail("a declaration must contain at least one action", "no_changes", 409)
+        final_order = declaration["final_order"]
+        if (not isinstance(final_order, list)
+                or not all(isinstance(value, str) for value in final_order)
+                or len(set(final_order)) != len(final_order)):
+            fail("final_order must be a list of unique clip identifiers")
+        base = rows[-1]["sections"]
+        working = copy.deepcopy(base)
+        new_by_id = {clip["clip_id"]: clip for clip in sections}
+        action_deltas = []
+        for action in actions:
+            keys(action, {"kind", "clip_id", "delta_s", "placement", "anchor_clip_id",
+                          "to_index", "at_s", "left_clip_id", "right_clip_id"}, {"kind"})
+            kind = action["kind"]
+            clip_id = action.get("clip_id")
+            if not isinstance(clip_id, str) or not ID_RE.fullmatch(clip_id):
+                fail("each action requires a safe clip_id")
+            index = next((i for i, clip in enumerate(working) if clip["clip_id"] == clip_id), -1)
+            if kind == "insert":
+                if clip_id in {clip["clip_id"] for clip in base} or clip_id not in new_by_id:
+                    fail("insert action must name a new submitted clip", "ripple_invalid", 409)
+                if index >= 0:
+                    fail("insert action clip already exists", "ripple_invalid", 409)
+                inserted = new_by_id[clip_id]
+                placement = action.get("placement", "append")
+                if placement not in ("append", "before", "after"):
+                    fail("insert placement must be append, before or after")
+                if placement == "append":
+                    position = len(working)
+                else:
+                    anchor = action.get("anchor_clip_id")
+                    if not isinstance(anchor, str) or not ID_RE.fullmatch(anchor):
+                        fail("insert before/after requires a safe anchor_clip_id")
+                    anchor_index = next((i for i, clip in enumerate(working) if clip["clip_id"] == anchor), -1)
+                    if anchor_index < 0 or anchor == clip_id:
+                        fail("insert anchor is missing", "ripple_invalid", 409)
+                    position = anchor_index + 1 if placement == "after" else anchor_index
+                working.insert(position, copy.deepcopy(inserted))
+                actual_delta = inserted["end_s"] - inserted["start_s"]
+            elif kind == "replace":
+                if index < 0 or clip_id not in new_by_id:
+                    fail("replace action must name an existing and submitted clip", "ripple_invalid", 409)
+                old = working[index]
+                new = new_by_id[clip_id]
+                if new["source_id"] != old["source_id"]:
+                    fail("replace must keep the original source", "ripple_invalid", 409)
+                working[index] = copy.deepcopy(new)
+                actual_delta = (new["end_s"] - new["start_s"]) - (old["end_s"] - old["start_s"])
+            elif kind == "reorder":
+                if index < 0:
+                    fail("reorder action must name an existing clip", "ripple_invalid", 409)
+                to_index = action.get("to_index")
+                if (isinstance(to_index, bool) or not isinstance(to_index, int)
+                        or not 0 <= to_index < len(working)):
+                    fail("reorder to_index must be an integer inside the arrangement")
+                moving = working.pop(index)
+                working.insert(to_index, moving)
+                actual_delta = 0.0
+            elif kind == "remove":
+                if index < 0:
+                    fail("remove action must name an existing clip", "ripple_invalid", 409)
+                removed = working.pop(index)
+                actual_delta = -(removed["end_s"] - removed["start_s"])
+            elif kind == "split":
+                if index < 0:
+                    fail("split action must name an existing clip", "ripple_invalid", 409)
+                old = working[index]
+                at = action.get("at_s")
+                if (isinstance(at, bool) or not isinstance(at, (int, float))
+                        or not math.isfinite(at) or not old["start_s"] < at < old["end_s"]):
+                    fail("split at_s must be finite and strictly inside the clip", "ripple_invalid", 409)
+                left_id = action.get("left_clip_id")
+                right_id = action.get("right_clip_id")
+                if (not isinstance(left_id, str) or not isinstance(right_id, str)
+                        or not ID_RE.fullmatch(left_id) or not ID_RE.fullmatch(right_id)
+                        or left_id == right_id
+                        or left_id in {clip["clip_id"] for clip in working}
+                        or right_id in {clip["clip_id"] for clip in working}
+                        or left_id not in new_by_id or right_id not in new_by_id):
+                    fail("split requires two new submitted clip identifiers", "ripple_invalid", 409)
+                left, right = new_by_id[left_id], new_by_id[right_id]
+                left_fade = min(old["fade_in_s"], at - old["start_s"])
+                right_fade = min(old["fade_out_s"], old["end_s"] - at)
+                if (abs(left["start_s"] - old["start_s"]) > 1e-6
+                        or abs(left["end_s"] - at) > 1e-6
+                        or abs(right["start_s"] - at) > 1e-6
+                        or abs(right["end_s"] - old["end_s"]) > 1e-6
+                        or left["source_id"] != old["source_id"]
+                        or right["source_id"] != old["source_id"]
+                        or abs(left["gain_db"] - old["gain_db"]) > 1e-9
+                        or abs(right["gain_db"] - old["gain_db"]) > 1e-9
+                        or abs(left["fade_in_s"] - left_fade) > 1e-6
+                        or abs(left["fade_out_s"]) > 1e-6
+                        or abs(right["fade_in_s"]) > 1e-6
+                        or abs(right["fade_out_s"] - right_fade) > 1e-6
+                        or left["label"] != old["label"] or right["label"] != old["label"]):
+                    fail("split parts must be adjacent, same-source, same-gain and preserve the old edge fades", "ripple_invalid", 409)
+                working[index:index + 1] = [copy.deepcopy(left), copy.deepcopy(right)]
+                actual_delta = 0.0
+            else:
+                fail("unknown operation kind", "validation", 422)
+            action_delta = action.get("delta_s")
+            if (isinstance(action_delta, bool) or not isinstance(action_delta, (int, float))
+                    or not math.isfinite(action_delta)):
+                if kind in ("reorder", "split"):
+                    action_delta = 0.0
+                else:
+                    fail(f"{kind} action requires a finite delta_s")
+            if abs(action_delta - actual_delta) > 1e-6:
+                fail(f"{kind} action delta does not match the actual length change", "ripple_invalid", 409)
+            action_deltas.append(actual_delta)
+        if abs(sum(action_deltas) - delta) > 1e-6:
+            fail("declaration delta_s must equal the sum of action deltas", "ripple_invalid", 409)
+        if abs(duration - (rows[-1]["duration_s"] + delta)) > 1e-6:
+            fail("declaration delta does not match the master duration change", "ripple_invalid", 409)
+        actual_ids = [clip["clip_id"] for clip in sections]
+        if final_order != actual_ids:
+            fail("final_order must equal the submitted section order", "ripple_invalid", 409)
+        if [clip["clip_id"] for clip in working] != actual_ids:
+            fail("declared actions do not produce the submitted section order", "ripple_invalid", 409)
+        for expected, actual in zip(working, sections):
+            if self._comparable_clip(expected) != self._comparable_clip(actual):
+                fail("declared actions do not preserve every untouched clip exactly", "ripple_invalid", 409)
+
     def create_revision(self, pid, request):
-        keys(request, {"expected_revision", "sections", "note"}, {"expected_revision", "sections"})
+        keys(request, {"expected_revision", "sections", "note", "declaration"},
+             {"expected_revision", "sections"})
         with self._locked(pid) as root:
             rows = self._expected(root, request["expected_revision"])
             if len(rows) >= MAX_REVISIONS:
                 fail("revision limit reached")
             sections, sources, duration = self._sections(pid, root, request["sections"])
+            declaration = request.get("declaration")
+            if rows and declaration is None:
+                fail("an explicit declaration is required for a non-initial revision", "operation_required", 409)
+            if not rows and declaration is not None:
+                fail("the initial revision cannot carry a declaration")
+            if declaration is not None:
+                self._validate_declaration(rows, sections, duration, declaration)
             note = request.get("note", "")
             if not isinstance(note, str) or len(note) > 2000:
                 fail("note must be text up to 2000 characters")
             record = {"revision": len(rows) + 1, "parent_revision": len(rows),
                       "parent_recipe_sha256": rows[-1]["recipe_sha256"] if rows else None,
                       "created_at": now(), "sections": sections, "note": note, "duration_s": duration,
-                      "source_ids": sorted(sources), "generation": False}
+                      "source_ids": sorted(sources), "declaration": declaration, "generation": False}
             record["recipe_sha256"] = digest({"sections": sections, "note": note})
             write_new(root / "revisions" / f"{record['revision']:06d}.json", record)
             return record
